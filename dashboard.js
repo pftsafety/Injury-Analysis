@@ -3,7 +3,7 @@
 // Replace APPS_SCRIPT_URL with your deployed Apps Script URL
 // ============================================================
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzV_PzGZ05yf54N7x-sTWP0HgXRk8yRhjkrFwwZy9t4TKvWxZSxQjuo79Ad_-BA6QNzQ/exec";
 
 // Chart.js global defaults
 Chart.defaults.color = "#8b90a0";
