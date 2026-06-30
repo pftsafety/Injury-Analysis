@@ -5,10 +5,27 @@
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzV_PzGZ05yf54N7x-sTWP0HgXRk8yRhjkrFwwZy9t4TKvWxZSxQjuo79Ad_-BA6QNzQ/exec";
 
-Chart.defaults.color = "#64748b";
+Chart.defaults.color = "#475569";
 Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.plugins.legend.display = false;
+
+// Global tooltip theme — fixes white-on-white text bug.
+// Individual chart tooltip configs only need backgroundColor/borderColor;
+// title/body text color now inherits from these defaults automatically.
+Chart.defaults.plugins.tooltip.backgroundColor = "#ffffff";
+Chart.defaults.plugins.tooltip.titleColor = "#0f172a";
+Chart.defaults.plugins.tooltip.bodyColor = "#334155";
+Chart.defaults.plugins.tooltip.borderColor = "#e2e8f0";
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.plugins.tooltip.padding = 10;
+Chart.defaults.plugins.tooltip.titleFont = { weight: 600, size: 12 };
+Chart.defaults.plugins.tooltip.bodyFont = { size: 11 };
+Chart.defaults.plugins.tooltip.boxPadding = 4;
+Chart.defaults.plugins.tooltip.cornerRadius = 8;
+Chart.defaults.plugins.tooltip.displayColors = true;
+// Subtle shadow so the white tooltip still reads as elevated above white cards
+Chart.defaults.plugins.tooltip.footerColor = "#64748b";
 
 const COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0ea5e9","#db2777","#65a30d","#ea580c","#0d9488"];
 const GRID = "rgba(15,23,42,0.06)";
@@ -321,20 +338,67 @@ function renderGlanceStats() {
   `).join('');
 }
 
-// ── Alert bell (high-risk department count) ─────────────────────
+// ── Alert bell (high-risk department count + dropdown panel) ────
+let highRiskDeptsCache = [];
+
 function renderAlertBell() {
   const countEl = document.getElementById('alertCount');
+  const bodyEl = document.getElementById('alertPanelBody');
   const deptEntries = Object.entries(appData.stats.byDepartment || {}).sort((a,b)=>b[1]-a[1]);
   const total = appData.stats.total || 1;
   // "High risk" = departments individually accounting for >15% of total incidents
   const highRisk = deptEntries.filter(([,v]) => (v/total) > 0.15);
+  highRiskDeptsCache = highRisk;
+
   if (highRisk.length > 0) {
     countEl.style.display = 'flex';
     countEl.textContent = highRisk.length;
   } else {
     countEl.style.display = 'none';
   }
+
+  if (!highRisk.length) {
+    bodyEl.innerHTML = `<div class="alert-panel-empty">No departments currently exceed the 15% risk threshold.</div>`;
+    return;
+  }
+
+  bodyEl.innerHTML = highRisk.map(([dept, val]) => {
+    const pct = (val/total*100).toFixed(0);
+    return `
+      <div class="alert-panel-item">
+        <div>
+          <div class="alert-panel-dept">${dept}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:1px">${val} incidents recorded</div>
+        </div>
+        <div class="alert-panel-pct">${pct}%</div>
+      </div>
+    `;
+  }).join('');
 }
+
+function toggleAlertPanel(e) {
+  e.stopPropagation();
+  const panel = document.getElementById('alertPanel');
+  const bell = document.getElementById('alertBell');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    bell.classList.remove('panel-open');
+  } else {
+    panel.classList.add('open');
+    bell.classList.add('panel-open');
+  }
+}
+
+// Close panel when clicking outside of it
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('alertPanel');
+  const wrap = document.querySelector('.alert-bell-wrap');
+  if (panel && panel.classList.contains('open') && wrap && !wrap.contains(e.target)) {
+    panel.classList.remove('open');
+    document.getElementById('alertBell').classList.remove('panel-open');
+  }
+});
 
 // ── Mini animated bar list (used in multiple panels) ──────────
 function renderBarList(containerId, entries, colorFn, maxItems) {
