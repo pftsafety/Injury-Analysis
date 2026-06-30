@@ -333,6 +333,38 @@ body::before {
 .year-select:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan-dim); }
 .year-select option { background: var(--card2); color: var(--text); }
 
+.record-search {
+  background: var(--card2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 7px 12px; border-radius: 8px;
+  font-family: var(--font-body);
+  outline: none; width: 220px;
+  transition: border-color 0.2s;
+}
+.record-search::placeholder { color: var(--muted); }
+.record-search:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan-dim); }
+
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.page-info { font-size: 11px; color: var(--muted); }
+.page-controls { display: flex; gap: 6px; }
+.page-btn {
+  background: var(--card2); border: 1px solid var(--border2);
+  color: var(--muted2); font-size: 12px; font-weight: 500;
+  padding: 5px 11px; border-radius: 7px; cursor: pointer;
+  transition: all 0.15s;
+}
+.page-btn:hover:not(:disabled) { background: var(--border); color: var(--text); }
+.page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.page-btn.active { background: var(--cyan-dim); color: var(--cyan); border-color: rgba(0,212,255,0.3); }
+
+.score-ring-wrap { flex-shrink: 0; }
+
 /* ── Risk Gauge ── */
 .gauge-wrap {
   display: flex; flex-direction: column; align-items: center;
@@ -672,9 +704,21 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         Departments
       </button>
+      <button class="nav-btn" onclick="showView('sections',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        Sections
+      </button>
       <button class="nav-btn" onclick="showView('injuries',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         Injury Types
+      </button>
+      <button class="nav-btn" onclick="showView('timeanalysis',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Time Analysis
+      </button>
+      <button class="nav-btn" onclick="showView('scorecard',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+        Safety Scorecard
       </button>
       <button class="nav-btn" onclick="showView('records',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -911,14 +955,133 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
       </div>
 
       <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- SECTIONS                                                -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="view-sections" class="view">
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">All sections — ranked</div>
+            <div class="card-sub">Total incidents per section, all time</div>
+          </div>
+          <div id="sectionBars"></div>
+        </div>
+        <div class="chart-card">
+          <div class="card-header">
+            <div class="card-title">Section comparison</div>
+            <div class="card-sub">Top 10 sections — horizontal view</div>
+          </div>
+          <div class="chart-wrap" style="height:340px">
+            <canvas id="sectionAllChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- TIME ANALYSIS                                           -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="view-timeanalysis" class="view">
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">Incidents by hour of day</div>
+              <div class="card-sub">When during the shift incidents occur</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="hourChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">Shift distribution</div>
+              <div class="card-sub">Morning / Afternoon / Evening / Night</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="shiftChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="card-header">
+            <div class="card-title">Day of week pattern</div>
+            <div class="card-sub">Which weekdays see the most incidents</div>
+          </div>
+          <div class="chart-wrap" style="height:240px">
+            <canvas id="dowChart"></canvas>
+          </div>
+        </div>
+        <div class="empty-state" id="timeEmptyState" style="display:none">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <div>Time analysis needs live data</div>
+          <div style="font-size:11px;margin-top:5px">Connect your Apps Script URL to see hour/day patterns from the Date and Time columns</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- SAFETY SCORECARD                                        -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="view-scorecard" class="view">
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Overall safety score</div>
+            <div class="card-sub">Composite score based on trend, severity mix, and department concentration</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding:8px 0">
+            <div class="score-ring-wrap">
+              <svg viewBox="0 0 120 120" width="140" height="140">
+                <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+                <circle id="scoreRingFill" cx="60" cy="60" r="52" fill="none" stroke="#00d4ff" stroke-width="10" stroke-linecap="round" stroke-dasharray="327" stroke-dashoffset="327" transform="rotate(-90 60 60)"/>
+                <text x="60" y="56" text-anchor="middle" font-family="Space Grotesk" font-size="28" font-weight="700" fill="#e2e8f0" id="scoreRingText">—</text>
+                <text x="60" y="76" text-anchor="middle" font-family="Inter" font-size="9" fill="#64748b">out of 100</text>
+              </svg>
+            </div>
+            <div style="flex:1;min-width:220px">
+              <div id="scoreLabel" style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:6px">—</div>
+              <div id="scoreDesc" style="font-size:12px;color:var(--muted);line-height:1.6">Calculating safety score from incident patterns…</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Score factors</div><div class="card-sub">What's driving the score</div></div>
+            <div id="scoreFactors"></div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Year-on-year change</div><div class="card-sub">Improvement or decline vs previous year</div></div>
+            <div id="yoyChange"></div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="card-header"><div class="card-title">Most improved vs most concerning</div><div class="card-sub">Department trend comparison (recent 6mo vs prior 6mo)</div></div>
+          <div class="chart-grid grid-2" style="margin-top:4px">
+            <div>
+              <div class="section-title" style="color:var(--green);font-size:11px;margin-bottom:8px">▾ Improving</div>
+              <div id="improvingDepts"></div>
+            </div>
+            <div>
+              <div class="section-title" style="color:var(--red);font-size:11px;margin-bottom:8px">▴ Worsening</div>
+              <div id="worseningDepts"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
       <!-- RECORDS                                                 -->
       <!-- ═══════════════════════════════════════════════════════ -->
       <div id="view-records" class="view">
         <div class="chart-card">
-          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
             <div>
               <div class="card-title">Incident register</div>
-              <div class="card-sub" id="recordCount">Latest records</div>
+              <div class="card-sub" id="recordCount">Loading records…</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input type="text" id="recordSearch" class="record-search" placeholder="Search name, dept, description…" oninput="onRecordSearch()">
+              <select id="deptFilter" class="year-select" onchange="onRecordSearch()">
+                <option value="">All departments</option>
+              </select>
             </div>
           </div>
           <div class="tbl-wrap">
@@ -935,6 +1098,7 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
               </tbody>
             </table>
           </div>
+          <div class="pagination" id="paginationWrap"></div>
         </div>
       </div>
 
