@@ -10,9 +10,9 @@ Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.plugins.legend.display = false;
 
-const COLORS = ["#00d4ff","#8b5cf6","#10b981","#f59e0b","#ef4444","#38bdf8","#f472b6","#84cc16","#fb923c","#22d3ee"];
-const GRID = "rgba(255,255,255,0.04)";
-const BORDER = "rgba(255,255,255,0.08)";
+const COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0ea5e9","#db2777","#65a30d","#ea580c","#0d9488"];
+const GRID = "rgba(15,23,42,0.06)";
+const BORDER = "rgba(15,23,42,0.12)";
 
 let charts = {};
 let appData = {};
@@ -147,6 +147,10 @@ function renderAll() {
   renderSectionAllChart();
   renderTimeAnalysis();
   renderScorecard();
+  renderInsightStrip();
+  renderRecentActivity();
+  renderGlanceStats();
+  renderAlertBell();
   initRecordsTable();
 }
 
@@ -190,9 +194,145 @@ function renderKPIs() {
       text.textContent = diff > 0
         ? `+${diff} vs last month`
         : `${diff} vs last month`;
-      chip.style.background = diff > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)';
-      chip.style.color = diff > 0 ? '#ef4444' : '#10b981';
+      chip.style.background = diff > 0 ? 'rgba(220,38,38,0.10)' : 'rgba(5,150,105,0.10)';
+      chip.style.color = diff > 0 ? '#dc2626' : '#059669';
     }
+  }
+}
+
+// ── Insight strip (auto-generated highlights) ──────────────────
+function renderInsightStrip() {
+  const container = document.getElementById('insightStrip');
+  const { stats, monthly } = appData;
+  const cards = [];
+
+  // 1. Trend direction insight
+  const last6 = monthly.monthly.slice(-6);
+  const prior6 = monthly.monthly.slice(-12, -6);
+  if (last6.length && prior6.length) {
+    const avgLast = last6.reduce((s,m)=>s+m.count,0) / last6.length;
+    const avgPrior = prior6.reduce((s,m)=>s+m.count,0) / prior6.length;
+    const pctChange = avgPrior ? ((avgLast - avgPrior) / avgPrior * 100) : 0;
+    const isWorse = pctChange > 5;
+    const isBetter = pctChange < -5;
+    cards.push({
+      type: isWorse ? 'danger' : isBetter ? 'good' : 'warn',
+      icon: isWorse
+        ? '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'
+        : '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
+      title: isWorse ? 'Rising incident trend' : isBetter ? 'Improving trend' : 'Stable trend',
+      desc: `Last 6 months averaged ${avgLast.toFixed(1)}/mo, ${Math.abs(pctChange).toFixed(0)}% ${pctChange>=0?'higher':'lower'} than the prior 6 months.`
+    });
+  }
+
+  // 2. Top department concentration
+  const deptEntries = Object.entries(stats.byDepartment || {}).sort((a,b)=>b[1]-a[1]);
+  if (deptEntries.length) {
+    const [topDept, topVal] = deptEntries[0];
+    const share = (topVal / stats.total * 100).toFixed(0);
+    cards.push({
+      type: share > 35 ? 'danger' : share > 20 ? 'warn' : 'good',
+      icon: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+      title: `${topDept} leads incidents`,
+      desc: `Accounts for ${share}% of all recorded incidents (${topVal} total) — the highest of any department.`
+    });
+  }
+
+  // 3. Gender skew insight
+  const m = stats.byGender?.Male || 0, f = stats.byGender?.Female || 0;
+  if (m + f > 0) {
+    const malePct = (m/(m+f)*100).toFixed(0);
+    cards.push({
+      type: 'warn',
+      icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+      title: `${malePct}% of incidents involve male workers`,
+      desc: `${m} male vs ${f} female incidents recorded across the full dataset.`
+    });
+  }
+
+  if (!cards.length) { container.innerHTML = ''; return; }
+
+  const iconWrap = svgInner => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${svgInner}</svg>`;
+
+  container.innerHTML = cards.map(c => `
+    <div class="insight-card ${c.type}">
+      <div class="insight-card-icon">${iconWrap(c.icon)}</div>
+      <div>
+        <div class="insight-card-title">${c.title}</div>
+        <div class="insight-card-desc">${c.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Recent activity feed ────────────────────────────────────────
+function renderRecentActivity() {
+  const container = document.getElementById('recentActivity');
+  const rows = appData.raw?.data || [];
+  if (!rows.length) {
+    container.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:10px 0">Connect live data to see recent incidents</div>`;
+    return;
+  }
+  const sorted = [...rows].filter(r => r['Date']).sort((a,b) => new Date(b['Date']) - new Date(a['Date'])).slice(0, 6);
+  container.innerHTML = sorted.map(r => `
+    <div class="activity-item">
+      <div class="activity-dot"></div>
+      <div>
+        <div class="activity-text">${r['Description of Incident'] || 'Incident recorded'}</div>
+        <div class="activity-meta">
+          <span>${new Date(r['Date']).toLocaleDateString('en-GB')}</span>
+          <span>·</span>
+          <span>${r['Dept'] || 'Unknown'}</span>
+          <span>·</span>
+          <span>${r['Section'] || ''}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── At-a-glance benchmarks ──────────────────────────────────────
+function renderGlanceStats() {
+  const container = document.getElementById('glanceStats');
+  const { stats, monthly } = appData;
+  const years = Object.keys(stats.byYear || {}).sort();
+  const recentYear = years[years.length - 1];
+  const prevYear = years[years.length - 2];
+
+  const peakMonth = [...monthly.monthly].sort((a,b)=>b.count-a.count)[0];
+  const lowMonth = [...monthly.monthly].sort((a,b)=>a.count-b.count)[0];
+  const deptCount = Object.keys(stats.byDepartment || {}).length;
+  const bodyPartCount = Object.keys(stats.byBodyPart || {}).length;
+
+  const items = [
+    { label: 'Departments tracked', value: deptCount },
+    { label: 'Distinct body parts injured', value: bodyPartCount },
+    { label: 'Highest incident month', value: peakMonth ? `${peakMonth.month} (${peakMonth.count})` : '—' },
+    { label: 'Lowest incident month', value: lowMonth ? `${lowMonth.month} (${lowMonth.count})` : '—' },
+    { label: `${recentYear || ''} vs ${prevYear || ''}`, value: (stats.byYear?.[recentYear] && stats.byYear?.[prevYear])
+        ? `${stats.byYear[recentYear]} vs ${stats.byYear[prevYear]}` : '—' }
+  ];
+
+  container.innerHTML = items.map(i => `
+    <div class="glance-item">
+      <div class="glance-label">${i.label}</div>
+      <div class="glance-value">${i.value}</div>
+    </div>
+  `).join('');
+}
+
+// ── Alert bell (high-risk department count) ─────────────────────
+function renderAlertBell() {
+  const countEl = document.getElementById('alertCount');
+  const deptEntries = Object.entries(appData.stats.byDepartment || {}).sort((a,b)=>b[1]-a[1]);
+  const total = appData.stats.total || 1;
+  // "High risk" = departments individually accounting for >15% of total incidents
+  const highRisk = deptEntries.filter(([,v]) => (v/total) > 0.15);
+  if (highRisk.length > 0) {
+    countEl.style.display = 'flex';
+    countEl.textContent = highRisk.length;
+  } else {
+    countEl.style.display = 'none';
   }
 }
 
@@ -239,11 +379,11 @@ function renderInjTypeBars() {
 }
 function renderNatureBars() {
   const sorted = Object.entries(appData.injury.natures||{}).sort((a,b)=>b[1]-a[1]);
-  renderBarList('natureBars', sorted, () => '#f59e0b');
+  renderBarList('natureBars', sorted, () => '#d97706');
 }
 function renderBodyBars() {
   const sorted = Object.entries(appData.stats.byBodyPart||{}).sort((a,b)=>b[1]-a[1]);
-  renderBarList('bodyBars', sorted, () => '#8b5cf6');
+  renderBarList('bodyBars', sorted, () => '#7c3aed');
 }
 
 // ── Year filter state ────────────────────────────────────────
@@ -310,8 +450,8 @@ function renderTrendChart() {
         animation: { duration: 900, easing: 'easeOutQuart' },
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 18, boxHeight: 2, padding: 12, font: { size: 11 }, color: '#94a3b8' } },
-          tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1, padding: 10, titleColor: '#e2e8f0', bodyColor: '#94a3b8', displayColors: true }
+          legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 18, boxHeight: 2, padding: 12, font: { size: 11 }, color: '#475569' } },
+          tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10, titleColor: '#0f172a', bodyColor: '#475569', displayColors: true }
         },
         scales: {
           x: { grid: { color: GRID }, border: { color: BORDER } },
@@ -329,8 +469,8 @@ function renderTrendChart() {
     document.getElementById('trendSub').textContent = `${currentYearFilter} — month by month`;
 
     const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-    gradient.addColorStop(0, 'rgba(0,212,255,0.25)');
-    gradient.addColorStop(1, 'rgba(0,212,255,0)');
+    gradient.addColorStop(0, 'rgba(37,99,235,0.16)');
+    gradient.addColorStop(1, 'rgba(37,99,235,0)');
 
     charts.trend = new Chart(ctx, {
       type: 'line',
@@ -339,10 +479,10 @@ function renderTrendChart() {
         datasets: [{
           label: currentYearFilter,
           data: monthMap,
-          borderColor: '#00d4ff',
+          borderColor: '#2563eb',
           backgroundColor: gradient,
           borderWidth: 2.5, tension: 0.4, fill: true,
-          pointRadius: 3, pointBackgroundColor: '#00d4ff', pointBorderColor: '#080b12', pointBorderWidth: 2,
+          pointRadius: 3, pointBackgroundColor: '#2563eb', pointBorderColor: '#ffffff', pointBorderWidth: 2,
           pointHoverRadius: 6
         }]
       },
@@ -352,7 +492,7 @@ function renderTrendChart() {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1, padding: 10, titleColor: '#e2e8f0', bodyColor: '#94a3b8', displayColors: false }
+          tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10, titleColor: '#0f172a', bodyColor: '#475569', displayColors: false }
         },
         scales: {
           x: { grid: { color: GRID }, border: { color: BORDER } },
@@ -378,8 +518,8 @@ function renderInjuryDonut() {
       responsive: true, maintainAspectRatio: false, cutout: '64%',
       animation: { animateRotate: true, duration: 900 },
       plugins: {
-        legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#94a3b8' } },
-        tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1, padding: 10 }
+        legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } },
+        tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10 }
       }
     }
   });
@@ -394,12 +534,12 @@ function renderYearChart() {
     type: 'bar',
     data: {
       labels: sorted.map(([k])=>k),
-      datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#00d4ff', borderRadius: 6, maxBarThickness: 36 }]
+      datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#2563eb', borderRadius: 6, maxBarThickness: 36 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800, easing: 'easeOutQuart' },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER } },
         y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
@@ -418,14 +558,14 @@ function renderGenderChart() {
     type: 'doughnut',
     data: {
       labels: ['Male', 'Female'],
-      datasets: [{ data: [m, f], backgroundColor: ['#00d4ff', '#f472b6'], borderWidth: 0, hoverOffset: 6 }]
+      datasets: [{ data: [m, f], backgroundColor: ['#2563eb', '#db2777'], borderWidth: 0, hoverOffset: 6 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '70%',
       animation: { animateRotate: true, duration: 900 },
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { boxWidth: 8, padding: 14, color: '#94a3b8' } },
-        tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 }
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 8, padding: 14, color: '#475569' } },
+        tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 }
       }
     }
   });
@@ -446,11 +586,11 @@ function renderHeatmap() {
 
   container.innerHTML = avgs.map((v, i) => {
     const intensity = v / maxAvg;
-    const r = Math.round(0 + (239-0)*intensity);
-    const g = Math.round(212 + (68-212)*intensity);
-    const b = Math.round(255 + (68-255)*intensity);
+    const r = Math.round(37 + (220-37)*intensity);
+    const g = Math.round(99 + (38-99)*intensity);
+    const b = Math.round(235 + (38-235)*intensity);
     return `
-      <div class="heat-cell" style="background:rgba(${r},${g},${b},${0.15 + intensity*0.7});opacity:${0.6+intensity*0.4}" title="${monthNames[i]}: avg ${v} incidents">
+      <div class="heat-cell" style="background:rgba(${r},${g},${b},${0.18 + intensity*0.55})" title="${monthNames[i]}: avg ${v} incidents">
         ${v}
         <span class="heat-month">${monthNames[i]}</span>
       </div>
@@ -465,11 +605,11 @@ function renderNatureChart() {
   const sorted = Object.entries(appData.injury.natures||{}).sort((a,b)=>b[1]-a[1]).slice(0,8);
   charts.nature = new Chart(ctx, {
     type: 'bar', indexAxis: 'y',
-    data: { labels: sorted.map(([k])=>k.length>20?k.slice(0,18)+'…':k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#10b981', borderRadius: 5 }] },
+    data: { labels: sorted.map(([k])=>k.length>20?k.slice(0,18)+'…':k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#059669', borderRadius: 5 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
         y: { grid: { display: false }, border: { color: BORDER } }
@@ -485,11 +625,11 @@ function renderBodyChart() {
   const sorted = Object.entries(appData.stats.byBodyPart||{}).sort((a,b)=>b[1]-a[1]).slice(0,8);
   charts.body = new Chart(ctx, {
     type: 'bar', indexAxis: 'y',
-    data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#8b5cf6', borderRadius: 5 }] },
+    data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#7c3aed', borderRadius: 5 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
         y: { grid: { display: false }, border: { color: BORDER } }
@@ -509,7 +649,7 @@ function renderDeptAllChart() {
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
         y: { grid: { display: false }, border: { color: BORDER } }
@@ -550,7 +690,7 @@ function renderSectionAllChart() {
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
         y: { grid: { display: false }, border: { color: BORDER } }
@@ -609,12 +749,12 @@ function renderTimeAnalysis() {
     type: 'bar',
     data: {
       labels: hourCounts.map((_,i) => `${i}:00`),
-      datasets: [{ data: hourCounts, backgroundColor: '#00d4ff', borderRadius: 4, maxBarThickness: 16 }]
+      datasets: [{ data: hourCounts, backgroundColor: '#2563eb', borderRadius: 4, maxBarThickness: 16 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 12 } },
         y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
@@ -629,12 +769,12 @@ function renderTimeAnalysis() {
     type: 'doughnut',
     data: {
       labels: Object.keys(shiftCounts),
-      datasets: [{ data: Object.values(shiftCounts), backgroundColor: ['#f59e0b','#00d4ff','#8b5cf6','#1e293b'], borderWidth: 0, hoverOffset: 6 }]
+      datasets: [{ data: Object.values(shiftCounts), backgroundColor: ['#d97706','#2563eb','#7c3aed','#1e293b'], borderWidth: 0, hoverOffset: 6 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
       animation: { animateRotate: true, duration: 900 },
-      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 10, color: '#94a3b8' } }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } }
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 10, color: '#475569' } }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } }
     }
   });
 
@@ -644,11 +784,11 @@ function renderTimeAnalysis() {
   const dowLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   charts.dow = new Chart(dctx, {
     type: 'bar',
-    data: { labels: dowLabels, datasets: [{ data: dowCounts, backgroundColor: '#10b981', borderRadius: 6, maxBarThickness: 50 }] },
+    data: { labels: dowLabels, datasets: [{ data: dowCounts, backgroundColor: '#059669', borderRadius: 6, maxBarThickness: 50 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800 },
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER } },
         y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
@@ -696,9 +836,9 @@ function renderScorecard() {
   setTimeout(() => { ring.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(0.16,1,0.3,1)'; ring.setAttribute('stroke-dashoffset', offset.toFixed(0)); }, 100);
 
   let label, color, desc;
-  if (clamped >= 75) { label = 'Good standing'; color = '#10b981'; desc = 'Incident trend is stable or improving, and risk is reasonably distributed across departments.'; }
-  else if (clamped >= 50) { label = 'Needs attention'; color = '#f59e0b'; desc = 'Some departments or trends show elevated risk concentration. Targeted intervention recommended.'; }
-  else { label = 'Critical — action required'; color = '#ef4444'; desc = 'Multiple risk factors are elevated. Incident rate, severity, or department concentration require immediate review.'; }
+  if (clamped >= 75) { label = 'Good standing'; color = '#059669'; desc = 'Incident trend is stable or improving, and risk is reasonably distributed across departments.'; }
+  else if (clamped >= 50) { label = 'Needs attention'; color = '#d97706'; desc = 'Some departments or trends show elevated risk concentration. Targeted intervention recommended.'; }
+  else { label = 'Critical — action required'; color = '#dc2626'; desc = 'Multiple risk factors are elevated. Incident rate, severity, or department concentration require immediate review.'; }
 
   ring.setAttribute('stroke', color);
   ringText.textContent = clamped;
@@ -710,9 +850,9 @@ function renderScorecard() {
   // Score factors breakdown
   const factorsEl = document.getElementById('scoreFactors');
   const factors = [
-    { name: 'Trend (40%)', val: Math.round(trendScore), color: trendScore >= 60 ? '#10b981' : trendScore >= 40 ? '#f59e0b' : '#ef4444' },
-    { name: 'Dept. concentration (30%)', val: Math.round(concentrationScore), color: concentrationScore >= 60 ? '#10b981' : concentrationScore >= 40 ? '#f59e0b' : '#ef4444' },
-    { name: 'Severity mix (30%)', val: Math.round(severityScore), color: severityScore >= 60 ? '#10b981' : severityScore >= 40 ? '#f59e0b' : '#ef4444' }
+    { name: 'Trend (40%)', val: Math.round(trendScore), color: trendScore >= 60 ? '#059669' : trendScore >= 40 ? '#d97706' : '#dc2626' },
+    { name: 'Dept. concentration (30%)', val: Math.round(concentrationScore), color: concentrationScore >= 60 ? '#059669' : concentrationScore >= 40 ? '#d97706' : '#dc2626' },
+    { name: 'Severity mix (30%)', val: Math.round(severityScore), color: severityScore >= 60 ? '#059669' : severityScore >= 40 ? '#d97706' : '#dc2626' }
   ];
   factorsEl.innerHTML = factors.map(f => `
     <div class="prog-bar-wrap">
@@ -737,8 +877,8 @@ function renderScorecard() {
     yoyEl.innerHTML = rows.slice(-5).map(r => `
       <div class="stat-row">
         <div class="stat-name" style="flex:0 0 60px">${r.year}</div>
-        <div class="stat-bar-wrap"><div class="stat-bar-track"><div class="stat-bar-fill" data-w="${Math.min(100, r.curr/Math.max(...rows.map(x=>x.curr))*100)}" style="background:#00d4ff"></div></div></div>
-        <div class="stat-num" style="color:${r.pct > 0 ? '#ef4444' : '#10b981'}">${r.pct > 0 ? '+' : ''}${r.pct.toFixed(0)}%</div>
+        <div class="stat-bar-wrap"><div class="stat-bar-track"><div class="stat-bar-fill" data-w="${Math.min(100, r.curr/Math.max(...rows.map(x=>x.curr))*100)}" style="background:#2563eb"></div></div></div>
+        <div class="stat-num" style="color:${r.pct > 0 ? '#dc2626' : '#059669'}">${r.pct > 0 ? '+' : ''}${r.pct.toFixed(0)}%</div>
       </div>
     `).join('');
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -774,11 +914,11 @@ function renderScorecard() {
     const worsening = diffs.filter(d => d.diff > 0).sort((a,b)=>b.diff-a.diff).slice(0,5);
 
     improvingEl.innerHTML = improving.length ? improving.map(d => `
-      <div class="stat-row"><div class="stat-name" style="flex:1">${d.dept}</div><div class="stat-num" style="color:#10b981">${d.diff}</div></div>
+      <div class="stat-row"><div class="stat-name" style="flex:1">${d.dept}</div><div class="stat-num" style="color:#059669">${d.diff}</div></div>
     `).join('') : `<div style="color:var(--muted);font-size:12px;padding:8px 0">No clear improvement detected</div>`;
 
     worseningEl.innerHTML = worsening.length ? worsening.map(d => `
-      <div class="stat-row"><div class="stat-name" style="flex:1">${d.dept}</div><div class="stat-num" style="color:#ef4444">+${d.diff}</div></div>
+      <div class="stat-row"><div class="stat-name" style="flex:1">${d.dept}</div><div class="stat-num" style="color:#dc2626">+${d.diff}</div></div>
     `).join('') : `<div style="color:var(--muted);font-size:12px;padding:8px 0">No clear worsening detected</div>`;
   } else {
     improvingEl.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0">Connect live data to see department trends</div>`;
@@ -965,7 +1105,7 @@ function renderPrediction(p, cachedAt) {
   const output = document.getElementById('predOutput');
   document.getElementById('predEmpty').style.display = 'none';
 
-  const riskColor = { Low:'#10b981', Medium:'#f59e0b', High:'#ef4444', Critical:'#ef4444' }[p.riskLevel] || '#00d4ff';
+  const riskColor = { Low:'#059669', Medium:'#d97706', High:'#dc2626', Critical:'#dc2626' }[p.riskLevel] || '#2563eb';
   const riskDim = { Low:'var(--green-dim)', Medium:'var(--amber-dim)', High:'var(--red-dim)', Critical:'var(--red-dim)' }[p.riskLevel] || 'var(--cyan-dim)';
 
   output.innerHTML = `
