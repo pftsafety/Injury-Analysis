@@ -127,6 +127,7 @@ function loadDemoData() {
 // ── Render everything ────────────────────────────────────────
 function renderAll() {
   renderKPIs();
+  populateYearFilter();
   renderTrendChart();
   renderDeptBars();
   renderInjuryDonut();
@@ -239,53 +240,121 @@ function renderBodyBars() {
   renderBarList('bodyBars', sorted, () => '#8b5cf6');
 }
 
-// ── Trend chart ──────────────────────────────────────────────
+// ── Year filter state ────────────────────────────────────────
+let currentYearFilter = 'all';
+
+function populateYearFilter() {
+  const sel = document.getElementById('yearFilter');
+  const years = [...new Set(appData.monthly.monthly.map(m => m.month.split('-')[0]))].sort();
+  const mostRecent = years[years.length - 1];
+  currentYearFilter = currentYearFilter === 'all' ? 'all' : currentYearFilter;
+
+  sel.innerHTML = `<option value="all">Compare all years</option>` +
+    years.map(y => `<option value="${y}">${y}${y === mostRecent ? ' (latest)' : ''}</option>`).join('');
+  sel.value = currentYearFilter;
+}
+
+function onYearFilterChange() {
+  currentYearFilter = document.getElementById('yearFilter').value;
+  renderTrendChart();
+}
+
+// ── Trend chart (year-aware) ──────────────────────────────────
 function renderTrendChart() {
   const ctx = document.getElementById('trendChart').getContext('2d');
   if (charts.trend) charts.trend.destroy();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const data = appData.monthly.monthly;
-  const labels = data.map(d => {
-    const [y,m] = d.month.split('-');
-    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1];
-    return m === '01' ? `${mn} ${y}` : mn;
-  });
 
-  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-  gradient.addColorStop(0, 'rgba(0,212,255,0.25)');
-  gradient.addColorStop(1, 'rgba(0,212,255,0)');
+  if (currentYearFilter === 'all') {
+    // Group by year, one line per year, x-axis = month name (overlay comparison)
+    const byYear = {};
+    data.forEach(({ month, count }) => {
+      const [y, m] = month.split('-');
+      if (!byYear[y]) byYear[y] = new Array(12).fill(null);
+      byYear[y][parseInt(m) - 1] = count;
+    });
+    const years = Object.keys(byYear).sort();
+    const recentYears = years.slice(-5); // show last 5 years max to avoid clutter
 
-  charts.trend = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data: data.map(d => d.count),
-        borderColor: '#00d4ff',
-        backgroundColor: gradient,
-        borderWidth: 2, tension: 0.4, fill: true,
-        pointRadius: 0, pointHoverRadius: 5,
-        pointHoverBackgroundColor: '#00d4ff',
-        pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      animation: { duration: 900, easing: 'easeOutQuart' },
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1,
-          padding: 10, titleColor: '#e2e8f0', bodyColor: '#94a3b8',
-          titleFont: { weight: 600 }, displayColors: false
+    document.getElementById('trendSub').textContent = `Comparing ${recentYears.join(', ')} side by side`;
+
+    const datasets = recentYears.map((y, i) => {
+      const isLatest = i === recentYears.length - 1;
+      return {
+        label: y,
+        data: byYear[y],
+        borderColor: COLORS[i % COLORS.length],
+        backgroundColor: 'transparent',
+        borderWidth: isLatest ? 3 : 1.5,
+        borderDash: isLatest ? [] : [4, 3],
+        tension: 0.35,
+        fill: false,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        spanGaps: true
+      };
+    });
+
+    charts.trend = new Chart(ctx, {
+      type: 'line',
+      data: { labels: monthNames, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 900, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 18, boxHeight: 2, padding: 12, font: { size: 11 }, color: '#94a3b8' } },
+          tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1, padding: 10, titleColor: '#e2e8f0', bodyColor: '#94a3b8', displayColors: true }
+        },
+        scales: {
+          x: { grid: { color: GRID }, border: { color: BORDER } },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
         }
-      },
-      scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 14, maxRotation: 0 } },
-        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
       }
-    }
-  });
+    });
+
+  } else {
+    // Single year — show all 12 months for that year
+    const yearData = data.filter(m => m.month.startsWith(currentYearFilter));
+    const monthMap = new Array(12).fill(0);
+    yearData.forEach(({ month, count }) => { monthMap[parseInt(month.split('-')[1]) - 1] = count; });
+
+    document.getElementById('trendSub').textContent = `${currentYearFilter} — month by month`;
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(0,212,255,0.25)');
+    gradient.addColorStop(1, 'rgba(0,212,255,0)');
+
+    charts.trend = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: monthNames,
+        datasets: [{
+          label: currentYearFilter,
+          data: monthMap,
+          borderColor: '#00d4ff',
+          backgroundColor: gradient,
+          borderWidth: 2.5, tension: 0.4, fill: true,
+          pointRadius: 3, pointBackgroundColor: '#00d4ff', pointBorderColor: '#080b12', pointBorderWidth: 2,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 900, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: '#111827', borderColor: '#1e293b', borderWidth: 1, padding: 10, titleColor: '#e2e8f0', bodyColor: '#94a3b8', displayColors: false }
+        },
+        scales: {
+          x: { grid: { color: GRID }, border: { color: BORDER } },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+        }
+      }
+    });
+  }
 }
 
 // ── Injury Donut ─────────────────────────────────────────────

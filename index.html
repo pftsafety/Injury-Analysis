@@ -318,6 +318,21 @@ body::before {
 }
 .insight-chip svg { width: 10px; height: 10px; }
 
+/* ── Year selector ── */
+.year-select {
+  background: var(--card2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-size: 12px; font-weight: 500;
+  padding: 6px 10px; border-radius: 8px;
+  font-family: var(--font-body);
+  cursor: pointer; outline: none;
+  transition: border-color 0.2s;
+}
+.year-select:hover { border-color: var(--cyan); }
+.year-select:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan-dim); }
+.year-select option { background: var(--card2); color: var(--text); }
+
 /* ── Risk Gauge ── */
 .gauge-wrap {
   display: flex; flex-direction: column; align-items: center;
@@ -751,14 +766,17 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
 
         <!-- Trend chart full width -->
         <div class="chart-card" style="margin-bottom:16px">
-          <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+          <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
             <div>
               <div class="card-title animated-underline" id="trendTitle">Monthly incident trend</div>
-              <div class="card-sub">All recorded months — hover for details</div>
+              <div class="card-sub" id="trendSub">Hover for details</div>
             </div>
-            <div id="trendInsightChip" class="insight-chip" style="display:none">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <span id="trendInsightText">—</span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div id="trendInsightChip" class="insight-chip" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span id="trendInsightText">—</span>
+              </div>
+              <select id="yearFilter" class="year-select" onchange="onYearFilterChange()"></select>
             </div>
           </div>
           <div class="chart-wrap" style="height:200px">
