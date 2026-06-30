@@ -9,26 +9,28 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 :root {
-  --bg:        #080b12;
-  --surface:   #0d1120;
-  --card:      #111827;
-  --card2:     #141c2e;
-  --border:    rgba(255,255,255,0.06);
-  --border2:   rgba(255,255,255,0.12);
-  --text:      #e2e8f0;
+  --bg:        #f4f6fa;
+  --surface:   #ffffff;
+  --card:      #ffffff;
+  --card2:     #f1f4f9;
+  --border:    rgba(15,23,42,0.07);
+  --border2:   rgba(15,23,42,0.14);
+  --text:      #0f172a;
   --muted:     #64748b;
-  --muted2:    #94a3b8;
-  --cyan:      #00d4ff;
-  --cyan-dim:  rgba(0,212,255,0.12);
-  --cyan-glow: rgba(0,212,255,0.25);
-  --amber:     #f59e0b;
-  --amber-dim: rgba(245,158,11,0.12);
-  --red:       #ef4444;
-  --red-dim:   rgba(239,68,68,0.12);
-  --green:     #10b981;
-  --green-dim: rgba(16,185,129,0.12);
-  --purple:    #8b5cf6;
-  --purple-dim:rgba(139,92,246,0.12);
+  --muted2:    #475569;
+  --cyan:      #2563eb;
+  --cyan-dim:  rgba(37,99,235,0.10);
+  --cyan-glow: rgba(37,99,235,0.25);
+  --amber:     #d97706;
+  --amber-dim: rgba(217,119,6,0.10);
+  --red:       #dc2626;
+  --red-dim:   rgba(220,38,38,0.10);
+  --green:     #059669;
+  --green-dim: rgba(5,150,105,0.10);
+  --purple:    #7c3aed;
+  --purple-dim:rgba(124,58,237,0.10);
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.05);
+  --shadow-md: 0 4px 16px rgba(15,23,42,0.07), 0 1px 3px rgba(15,23,42,0.05);
   --r: 14px;
   --font-display: 'Space Grotesk', system-ui, sans-serif;
   --font-body:    'Inter', system-ui, sans-serif;
@@ -53,8 +55,8 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0,212,255,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,0.04) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(37,99,235,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(124,58,237,0.04) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
 }
@@ -62,8 +64,8 @@ body::before {
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.2)}
+::-webkit-scrollbar-thumb{background:rgba(15,23,42,0.15);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(15,23,42,0.28)}
 
 /* ── Shell ── */
 .shell{display:flex;min-height:100vh;position:relative;z-index:1}
@@ -82,6 +84,7 @@ body::before {
   height: 100vh;
   overflow-y: auto;
   z-index: 20;
+  box-shadow: 1px 0 0 rgba(15,23,42,0.03);
 }
 
 .sidebar-brand {
@@ -94,9 +97,9 @@ body::before {
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-display);
-  font-size: 13px; font-weight: 700; color: #000;
+  font-size: 13px; font-weight: 700; color: #fff;
   margin-bottom: 12px;
-  box-shadow: 0 0 20px var(--cyan-glow);
+  box-shadow: 0 4px 14px var(--cyan-glow);
 }
 .brand-name {
   font-family: var(--font-display);
@@ -161,7 +164,7 @@ body::before {
 
 /* ── Topbar ── */
 .topbar {
-  background: rgba(13,17,32,0.8);
+  background: rgba(255,255,255,0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   padding: 14px 28px;
@@ -174,7 +177,27 @@ body::before {
   font-size: 17px; font-weight: 700;
   letter-spacing: -0.4px;
 }
+.topbar-breadcrumb { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.alert-bell {
+  position: relative;
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card); border: 1px solid var(--border2);
+  border-radius: 9px; cursor: pointer; color: var(--muted2);
+  transition: all 0.2s;
+}
+.alert-bell:hover { background: var(--border); color: var(--text); }
+.alert-bell svg { width: 15px; height: 15px; }
+.alert-count {
+  position: absolute; top: -5px; right: -5px;
+  background: var(--red); color: #fff;
+  font-size: 9px; font-weight: 700;
+  min-width: 16px; height: 16px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px; border: 2px solid var(--surface);
+}
 
 .live-badge {
   display: flex; align-items: center; gap: 5px;
@@ -228,8 +251,9 @@ body::before {
   position: relative; overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
   cursor: default;
+  box-shadow: var(--shadow-sm);
 }
-.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .kpi-card::after {
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 1px;
@@ -295,8 +319,9 @@ body::before {
   padding: 20px;
   transition: box-shadow 0.2s;
   position: relative; overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
-.chart-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.2); }
+.chart-card:hover { box-shadow: var(--shadow-md); }
 
 .card-header { margin-bottom: 16px; }
 .card-title {
@@ -365,6 +390,58 @@ body::before {
 
 .score-ring-wrap { flex-shrink: 0; }
 
+/* ── Insight strip ── */
+.insight-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+.insight-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  border-radius: 10px;
+  padding: 13px 15px;
+  box-shadow: var(--shadow-sm);
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.insight-card.warn { border-left-color: var(--amber); }
+.insight-card.danger { border-left-color: var(--red); }
+.insight-card.good { border-left-color: var(--green); }
+.insight-card-icon {
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cyan-dim); color: var(--cyan);
+}
+.insight-card.warn .insight-card-icon { background: var(--amber-dim); color: var(--amber); }
+.insight-card.danger .insight-card-icon { background: var(--red-dim); color: var(--red); }
+.insight-card.good .insight-card-icon { background: var(--green-dim); color: var(--green); }
+.insight-card-icon svg { width: 13px; height: 13px; }
+.insight-card-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.insight-card-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+/* ── Recent activity feed ── */
+.activity-item {
+  display: flex; gap: 11px; align-items: flex-start;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  margin-top: 5px; flex-shrink: 0; background: var(--cyan);
+}
+.activity-text { font-size: 12px; color: var(--text); line-height: 1.5; }
+.activity-meta { font-size: 10px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; }
+
+/* ── At a glance stats ── */
+.glance-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0; border-bottom: 1px solid var(--border);
+}
+.glance-item:last-child { border-bottom: none; }
+.glance-label { font-size: 12px; color: var(--muted2); }
+.glance-value { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--text); }
+
 /* ── Risk Gauge ── */
 .gauge-wrap {
   display: flex; flex-direction: column; align-items: center;
@@ -389,13 +466,13 @@ body::before {
   border-radius: 4px;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  font-size: 8px; font-weight: 600;
-  color: rgba(255,255,255,0.6);
+  font-size: 8px; font-weight: 700;
+  color: rgba(15,23,42,0.7);
   cursor: default; transition: transform 0.15s, opacity 0.15s;
   position: relative;
 }
 .heat-cell:hover { transform: scale(1.15); opacity: 1 !important; }
-.heat-month { font-size: 7px; color: rgba(255,255,255,0.5); margin-top: 1px; }
+.heat-month { font-size: 7px; color: rgba(15,23,42,0.55); margin-top: 1px; }
 
 /* ── Animated progress bar ── */
 .prog-bar-wrap { margin-bottom: 10px; }
@@ -447,7 +524,7 @@ tbody td {
 }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr { transition: background 0.15s; }
-tbody tr:hover td { background: rgba(255,255,255,0.02); }
+tbody tr:hover td { background: rgba(15,23,42,0.025); }
 
 .badge {
   display: inline-flex; align-items: center;
@@ -546,13 +623,14 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
 .btn-generate {
   display: inline-flex; align-items: center; gap: 8px;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
-  border: none; color: #000; font-weight: 700;
+  border: none; color: #fff; font-weight: 700;
   padding: 10px 20px; border-radius: 9px;
   font-size: 13px; cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
   font-family: var(--font-display);
+  box-shadow: 0 4px 14px rgba(37,99,235,0.25);
 }
-.btn-generate:hover { opacity: 0.92; transform: translateY(-1px); }
+.btn-generate:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(37,99,235,0.32); }
 .btn-generate:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .btn-generate svg { width: 14px; height: 14px; }
 
@@ -645,6 +723,7 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
   .sidebar { display: none; }
   .grid-2, .grid-1-2, .grid-2-1 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr 1fr; }
+  .insight-strip { grid-template-columns: 1fr; }
   .content { padding: 16px; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .pred-stats { grid-template-columns: 1fr; }
@@ -673,7 +752,7 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
 <!-- Page Loader -->
 <div id="pageLoader">
   <div class="load-ring"></div>
-  <div class="load-brand">SHE Analytics</div>
+  <div class="load-brand">SHE Injury Analytics</div>
   <div class="load-sub">Loading incident intelligence…</div>
 </div>
 
@@ -745,9 +824,16 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
   <div class="main">
     <div class="topbar">
       <div class="topbar-left">
-        <div class="topbar-title" id="viewTitle">Dashboard</div>
+        <div>
+          <div class="topbar-title" id="viewTitle">Dashboard</div>
+          <div class="topbar-breadcrumb" id="topbarBreadcrumb">Total Work Injury Register · 2015–2026</div>
+        </div>
       </div>
       <div class="topbar-right">
+        <button class="alert-bell" id="alertBell" title="High-risk departments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="alert-count" id="alertCount" style="display:none">0</span>
+        </button>
         <div class="live-badge"><span class="live-dot"></span>LIVE</div>
         <button class="btn-refresh" id="refreshBtn" onclick="loadAll()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -828,6 +914,8 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
           </div>
         </div>
 
+        <div class="insight-strip" id="insightStrip"></div>
+
         <div class="chart-grid grid-2">
           <div class="chart-card">
             <div class="card-header">
@@ -844,6 +932,23 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
             <div class="chart-wrap" style="height:200px">
               <canvas id="injuryDonut"></canvas>
             </div>
+          </div>
+        </div>
+
+        <div class="chart-grid grid-2-1">
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">Recent activity</div>
+              <div class="card-sub">Latest incidents logged in the register</div>
+            </div>
+            <div id="recentActivity"></div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">At a glance</div>
+              <div class="card-sub">Key ratios and benchmarks</div>
+            </div>
+            <div id="glanceStats"></div>
           </div>
         </div>
       </div>
@@ -1028,7 +1133,7 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
           <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding:8px 0">
             <div class="score-ring-wrap">
               <svg viewBox="0 0 120 120" width="140" height="140">
-                <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+                <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(15,23,42,0.07)" stroke-width="10"/>
                 <circle id="scoreRingFill" cx="60" cy="60" r="52" fill="none" stroke="#00d4ff" stroke-width="10" stroke-linecap="round" stroke-dasharray="327" stroke-dashoffset="327" transform="rotate(-90 60 60)"/>
                 <text x="60" y="56" text-anchor="middle" font-family="Space Grotesk" font-size="28" font-weight="700" fill="#e2e8f0" id="scoreRingText">—</text>
                 <text x="60" y="76" text-anchor="middle" font-family="Inter" font-size="9" fill="#64748b">out of 100</text>
