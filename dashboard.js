@@ -30,6 +30,7 @@ Chart.defaults.plugins.tooltip.footerColor = "#64748b";
 const COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0ea5e9","#db2777","#65a30d","#ea580c","#0d9488"];
 const GRID = "rgba(15,23,42,0.06)";
 const BORDER = "rgba(15,23,42,0.12)";
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 let charts = {};
 let appData = {};
@@ -40,7 +41,7 @@ function showView(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
-  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', prediction:'AI Prediction' };
+  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', prediction:'AI Prediction' };
   document.getElementById('viewTitle').textContent = titles[id] || id;
 }
 
@@ -169,6 +170,7 @@ function renderAll() {
   renderGlanceStats();
   renderAlertBell();
   initRecordsTable();
+  initExplorer();
 }
 
 // ── KPIs ─────────────────────────────────────────────────────
@@ -1169,48 +1171,113 @@ function renderPrediction(p, cachedAt) {
   const output = document.getElementById('predOutput');
   document.getElementById('predEmpty').style.display = 'none';
 
-  const riskColor = { Low:'#059669', Medium:'#d97706', High:'#dc2626', Critical:'#dc2626' }[p.riskLevel] || '#2563eb';
-  const riskDim = { Low:'var(--green-dim)', Medium:'var(--amber-dim)', High:'var(--red-dim)', Critical:'var(--red-dim)' }[p.riskLevel] || 'var(--cyan-dim)';
+  // Support both old flat format and new nested { previousMonth, currentMonth } format
+  const curr = p.currentMonth || p;
+  const prev = p.previousMonth || null;
 
-  output.innerHTML = `
+  const riskColor = { Low:'#059669', Medium:'#d97706', High:'#dc2626', Critical:'#dc2626' }[curr.riskLevel] || '#2563eb';
+
+  const tabsHtml = prev ? `
+    <div class="pred-tabs">
+      <button class="pred-tab active" id="tab-review" onclick="switchPredTab('review')">
+        📋 ${prev.label || 'Last Month'} Review
+      </button>
+      <button class="pred-tab" id="tab-forecast" onclick="switchPredTab('forecast')">
+        🔮 ${curr.generatedFor || 'This Month'} Forecast
+      </button>
+    </div>
+  ` : '';
+
+  const reviewHtml = prev ? `
+  <div class="pred-tab-content active" id="pred-tab-review">
+    <div class="review-hero">
+      <div class="review-hero-label">Monthly Review — ${prev.label}</div>
+      <div class="review-hero-count">${prev.actualIncidents ?? '—'}</div>
+      <div class="review-hero-sub">Total incidents recorded in ${prev.label}</div>
+      <div class="review-hero-summary">${prev.summary || ''}</div>
+    </div>
+
+    <div class="review-grid">
+      <div class="review-card">
+        <div class="review-card-title">By Department</div>
+        ${(prev.mostAffectedDepartments || []).map(d => `
+          <div class="review-row">
+            <div class="review-row-label">${d.dept}</div>
+            <div class="review-row-val">${d.count}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="review-card">
+        <div class="review-card-title">By Incident Type</div>
+        ${(prev.topIncidentTypes || []).map(t => `
+          <div class="review-row">
+            <div class="review-row-label">${t.type}</div>
+            <div class="review-row-val">${t.count}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="section-header"><div class="section-title">Root cause themes</div></div>
+    ${(prev.rootCauseThemes || []).map(r => `
+      <div class="root-cause-item">
+        <div class="root-cause-theme">${r.theme}</div>
+        <div class="root-cause-detail">${r.detail}</div>
+      </div>
+    `).join('')}
+
+    <div class="section-header" style="margin-top:18px"><div class="section-title">Lessons learned & recommendations</div></div>
+    ${(prev.lessonsLearned || []).map((l, i) => `
+      <div class="lesson-item">
+        <div class="lesson-num">${i+1}</div>
+        <div>
+          <div class="lesson-title">${l.lesson}</div>
+          <div class="lesson-detail">${l.detail}</div>
+        </div>
+      </div>
+    `).join('')}
+  </div>
+  ` : '';
+
+  const forecastHtml = `
+  <div class="pred-tab-content ${prev ? '' : 'active'}" id="pred-tab-forecast">
     <div class="pred-hero">
-      <div class="pred-month">Prediction for ${p.generatedFor || '—'}</div>
-      <div class="pred-summary">${p.summary || ''}</div>
+      <div class="pred-month">Forecast for ${curr.generatedFor || '—'}</div>
+      <div class="pred-summary">${curr.summary || ''}</div>
       ${cachedAt ? `<div class="pred-meta">Generated ${new Date(cachedAt).toLocaleString()}</div>` : ''}
     </div>
 
     <div class="pred-stats">
-      <div class="kpi-card" style="border-top:1px solid ${riskColor}55">
+      <div class="kpi-card" style="border-top:2px solid ${riskColor}">
         <div class="kpi-label">Risk Level</div>
-        <div class="kpi-value" style="font-size:22px;color:${riskColor}">${p.riskLevel||'—'}</div>
+        <div class="kpi-value" style="font-size:22px;color:${riskColor}">${curr.riskLevel||'—'}</div>
       </div>
       <div class="kpi-card c-cyan">
         <div class="kpi-label">Predicted Incidents</div>
-        <div class="kpi-value">${p.predictedIncidents ?? '—'}</div>
+        <div class="kpi-value">${curr.predictedIncidents ?? '—'}</div>
         <div class="kpi-sub">This month estimate</div>
       </div>
       <div class="kpi-card c-green">
         <div class="kpi-label">Confidence</div>
-        <div class="kpi-value">${p.confidencePercent ?? '—'}%</div>
+        <div class="kpi-value">${curr.confidencePercent ?? '—'}%</div>
         <div class="kpi-sub">Model confidence</div>
       </div>
     </div>
 
-    ${p.trendInsight || p.seasonalFactors ? `
+    ${curr.trendInsight || curr.seasonalFactors ? `
     <div class="pred-factors">
-      ${p.trendInsight ? `<div><span class="factor-label trend">Trend</span>${p.trendInsight}</div>` : ''}
-      ${p.seasonalFactors ? `<div style="margin-top:6px"><span class="factor-label season">Seasonal</span>${p.seasonalFactors}</div>` : ''}
+      ${curr.trendInsight ? `<div><span class="factor-label trend">Trend</span>${curr.trendInsight}</div>` : ''}
+      ${curr.seasonalFactors ? `<div style="margin-top:6px"><span class="factor-label season">Seasonal</span>${curr.seasonalFactors}</div>` : ''}
     </div>` : ''}
 
-    ${(p.highRiskDepartments||[]).length ? `
+    ${(curr.highRiskDepartments||[]).length ? `
     <div class="section-header"><div class="section-title">High-risk departments</div></div>
-    <div class="dept-tags">${p.highRiskDepartments.map(d=>`<span class="dept-tag">${d}</span>`).join('')}</div>
-    ` : ''}
+    <div class="dept-tags">${curr.highRiskDepartments.map(d=>`<span class="dept-tag">${d}</span>`).join('')}</div>` : ''}
 
     <div class="section-header"><div class="section-title">Top risk factors</div></div>
     <div class="risk-cards">
-      ${(p.topRisks||[]).map(r => {
-        const likeColor = r.likelihood === 'High' ? 'badge-red' : r.likelihood === 'Medium' ? 'badge-amber' : 'badge-green';
+      ${(curr.topRisks||[]).map(r => {
+        const likeColor = r.likelihood==='High' ? 'badge-red' : r.likelihood==='Medium' ? 'badge-amber' : 'badge-green';
         return `
         <div class="risk-card">
           <div>
@@ -1227,9 +1294,9 @@ function renderPrediction(p, cachedAt) {
 
     <div class="section-header" style="margin-top:18px"><div class="section-title">Prevention actions</div></div>
     <div class="action-cards">
-      ${(p.preventionActions||[]).map((a,i) => {
-        const numStyle = a.priority === 'Urgent' ? 'background:var(--red-dim);color:var(--red)' : a.priority === 'High' ? 'background:var(--amber-dim);color:var(--amber)' : 'background:var(--cyan-dim);color:var(--cyan)';
-        const badgeClass = a.priority === 'Urgent' ? 'badge-red' : a.priority === 'High' ? 'badge-amber' : 'badge-muted';
+      ${(curr.preventionActions||[]).map((a,i) => {
+        const numStyle = a.priority==='Urgent' ? 'background:var(--red-dim);color:var(--red)' : a.priority==='High' ? 'background:var(--amber-dim);color:var(--amber)' : 'background:var(--cyan-dim);color:var(--cyan)';
+        const badgeClass = a.priority==='Urgent' ? 'badge-red' : a.priority==='High' ? 'badge-amber' : 'badge-muted';
         return `
         <div class="action-card">
           <div class="action-num" style="${numStyle}">${i+1}</div>
@@ -1240,33 +1307,616 @@ function renderPrediction(p, cachedAt) {
         </div>`;
       }).join('')}
     </div>
+  </div>
   `;
+
+  output.innerHTML = tabsHtml + reviewHtml + forecastHtml;
   output.style.display = 'block';
+}
+
+function switchPredTab(tab) {
+  document.querySelectorAll('.pred-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pred-tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab)?.classList.add('active');
+  document.getElementById('pred-tab-' + tab)?.classList.add('active');
 }
 
 // ── Demo Prediction ──────────────────────────────────────────
 const DEMO_PREDICTION = {
-  generatedFor: "July 2026",
-  riskLevel: "High",
-  predictedIncidents: 26,
-  confidencePercent: 74,
-  summary: "Based on historical patterns from 2015–2026, July typically shows elevated incident rates due to increased production load and monsoon-related hazards. Primary Production and Packing departments account for over 50% of incidents and warrant heightened monitoring this month.",
-  topRisks: [
-    { risk: "Hand/Finger contact injuries", likelihood: "High", impact: "High", detail: "Abrasion and cut injuries to hands consistently peak in production-heavy months." },
-    { risk: "Eye foreign body exposure", likelihood: "High", impact: "Medium", detail: "CED and mechanical sections show recurring chemical and dust-related eye incidents." },
-    { risk: "Slip and fall — wet floors", likelihood: "Medium", impact: "Medium", detail: "Canteen and admin areas see seasonal slip incidents during the monsoon period." },
-    { risk: "Chemical spill (spring-setting)", likelihood: "Medium", impact: "High", detail: "Spring-setting section historically has 2–3 chemical incidents per quarter." }
-  ],
-  highRiskDepartments: ["Primary Production", "Packing", "Engineering"],
-  preventionActions: [
-    { action: "Hand protection audit", priority: "Urgent", description: "Conduct glove compliance check across all production lines before shift start daily." },
-    { action: "Eye wash station inspection", priority: "High", description: "Verify all eye-wash stations in CED and Mechanical sections are operational." },
-    { action: "Wet floor signage", priority: "High", description: "Deploy additional slip-warning signage in kitchen, canteen, and admin corridors." },
-    { action: "Chemical handling refresher", priority: "Medium", description: "Schedule a 30-minute toolbox talk on chemical spill SOP for spring-setting operators." }
-  ],
-  seasonalFactors: "July marks the monsoon onset in Kerala — wet floors and humidity increase slip and chemical handling risks.",
-  trendInsight: "Incident counts show a gradual upward trend of ~5% year-on-year since 2020, suggesting need for systemic intervention."
+  generatedAt: new Date().toISOString(),
+  previousMonth: {
+    label: "June 2026",
+    actualIncidents: 24,
+    summary: "June 2026 recorded 24 incidents, consistent with the historical monthly average. Abrasion injuries dominated at 12 cases, concentrated in the Packing and Primary Production departments. An uptick in eye-related foreign body incidents (5 cases) was notable, particularly in CED and Mechanical sections during the first fortnight.",
+    topIncidentTypes: [
+      { type: "Abrasion", count: 12 },
+      { type: "Foreign Body (Eye)", count: 5 },
+      { type: "Pain & Swelling", count: 4 },
+      { type: "Trauma", count: 3 }
+    ],
+    mostAffectedDepartments: [
+      { dept: "Primary Production", count: 9 },
+      { dept: "Packing", count: 7 },
+      { dept: "Engineering", count: 5 },
+      { dept: "ETD", count: 3 }
+    ],
+    rootCauseThemes: [
+      { theme: "Hand tool contact", detail: "Manual handling of foil rolls, crates, and metal rod components without adequate grip protection led to the majority of abrasion cases." },
+      { theme: "Eye protection compliance", detail: "Five foreign body eye incidents in CED and Mechanical suggest inconsistent use of safety goggles during drilling and cutting operations." },
+      { theme: "Canteen slip risk", detail: "Two slip-and-fall events in the canteen during peak meal hours indicate persistent wet-floor hazard management gaps." }
+    ],
+    lessonsLearned: [
+      { lesson: "Mandatory glove verification at shift start", detail: "Implement a supervisor sign-off for glove usage before any production line activity begins." },
+      { lesson: "Eye protection spot checks in CED", detail: "Introduce unannounced PPE compliance audits in CED section twice per week." },
+      { lesson: "Canteen anti-slip mats", detail: "Install permanent anti-slip matting at kitchen exit and serving counter areas to eliminate wet-floor incidents." }
+    ]
+  },
+  currentMonth: {
+    generatedFor: "July 2026",
+    riskLevel: "High",
+    predictedIncidents: 27,
+    confidencePercent: 76,
+    summary: "Building on June's patterns, July carries elevated risk due to monsoon onset in Kerala combined with high production load. The unresolved eye protection compliance gap from June is likely to carry over, and wet-floor risks will intensify with monsoon rains tracked into factory entrances.",
+    topRisks: [
+      { risk: "Hand/Finger contact injuries", likelihood: "High", impact: "High", detail: "Abrasion and laceration risk remains high in Packing and Primary Production through July." },
+      { risk: "Eye foreign body — CED & Mechanical", likelihood: "High", impact: "Medium", detail: "Unresolved compliance gap from June makes repeat eye incidents probable without intervention." },
+      { risk: "Monsoon slip and fall", likelihood: "High", impact: "Medium", detail: "July monsoon rains bring wet flooring at entrances, canteen, and walkways across all sections." },
+      { risk: "Chemical spill — spring-setting", likelihood: "Medium", impact: "High", detail: "Humidity-related equipment handling changes increase spill risk in spring-setting area." }
+    ],
+    highRiskDepartments: ["Primary Production", "Packing", "Engineering"],
+    preventionActions: [
+      { action: "Glove compliance audit", priority: "Urgent", description: "Daily supervisor sign-off on glove usage before all production line shifts — escalate non-compliance immediately." },
+      { action: "Eye protection enforcement — CED", priority: "Urgent", description: "Zero-tolerance PPE policy for CED and Mechanical drilling/cutting operations effective immediately." },
+      { action: "Monsoon floor safety protocol", priority: "High", description: "Deploy wet-floor signage and non-slip mats at all factory entrances, canteen, and high-traffic walkways." },
+      { action: "Chemical SOP refresher", priority: "Medium", description: "30-minute toolbox talk on monsoon-period chemical handling protocols for spring-setting section operators." }
+    ],
+    seasonalFactors: "July marks peak monsoon in Kerala — wet floors, low visibility at entrances, and humidity-driven fatigue combine to elevate slip and handling risks significantly.",
+    trendInsight: "June's 24 incidents and the 12-month average of ~22/month suggest a mild upward drift; without direct intervention on the identified gaps, July is likely to trend above 25."
+  }
 };
+
+// ── Email modal ───────────────────────────────────────────────
+async function openEmailModal() {
+  const modal = document.getElementById('emailModal');
+  const overlay = document.getElementById('emailOverlay');
+  modal.classList.add('open');
+  overlay.classList.add('open');
+  clearEmailStatus();
+
+  // Pre-fill saved addresses
+  if (!APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
+    try {
+      const saved = await api('get_email');
+      if (saved.to) document.getElementById('emailTo').value = saved.to;
+      if (saved.cc) document.getElementById('emailCc').value = saved.cc;
+    } catch(e) {}
+  } else {
+    // Demo: pre-fill placeholder
+    document.getElementById('emailTo').placeholder = 'Connect your Apps Script URL to enable email';
+  }
+
+  // Focus the To field
+  setTimeout(() => document.getElementById('emailTo').focus(), 100);
+}
+
+function closeEmailModal() {
+  document.getElementById('emailModal').classList.remove('open');
+  document.getElementById('emailOverlay').classList.remove('open');
+}
+
+function clearEmailStatus() {
+  const s = document.getElementById('emailStatus');
+  s.style.display = 'none';
+  s.className = 'email-status';
+  s.textContent = '';
+}
+
+function setEmailStatus(type, message) {
+  const s = document.getElementById('emailStatus');
+  s.style.display = 'block';
+  s.className = 'email-status ' + type;
+  s.textContent = message;
+}
+
+async function sendReport() {
+  const to = document.getElementById('emailTo').value.trim();
+  const cc = document.getElementById('emailCc').value.trim();
+  const saveAddresses = document.getElementById('saveEmail').checked;
+  const sendBtn = document.getElementById('sendEmailBtn');
+
+  if (!to) { setEmailStatus('error', '⚠ Please enter a recipient email address.'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { setEmailStatus('error', '⚠ Please enter a valid email address.'); return; }
+
+  if (APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
+    setEmailStatus('success', '✓ Demo mode — email would be sent to ' + to);
+    return;
+  }
+
+  // Check prediction exists
+  const predOutput = document.getElementById('predOutput');
+  if (!predOutput || predOutput.style.display === 'none') {
+    setEmailStatus('error', '⚠ No report generated yet. Please click Generate Now first.');
+    return;
+  }
+
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 0.7s linear infinite;width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Sending…`;
+  setEmailStatus('sending', '⏳ Sending report via Google Mail…');
+
+  try {
+    // Save addresses first if requested
+    if (saveAddresses) {
+      await api('save_email', `to=${encodeURIComponent(to)}&cc=${encodeURIComponent(cc)}`);
+    }
+    // Send the email
+    const result = await api('send_email', `to=${encodeURIComponent(to)}&cc=${encodeURIComponent(cc)}`);
+
+    if (result.success) {
+      setEmailStatus('success', '✓ ' + result.message);
+      // Auto-close after 2.5s on success
+      setTimeout(() => closeEmailModal(), 2500);
+    } else {
+      setEmailStatus('error', '✗ ' + (result.error || 'Failed to send email.'));
+    }
+  } catch(e) {
+    setEmailStatus('error', '✗ Error: ' + e.message);
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Report`;
+  }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeEmailModal();
+});
+
+// ── Explorer: multi-year/month/dept cross-analysis ──────────────
+let explorerInitialized = false;
+let explorerState = { years: new Set(), months: new Set(), dept: '' };
+let explorerYearsAvailable = [];
+const explorerMonthsAvailable = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+function tallyBy(rows, field) {
+  const map = {};
+  rows.forEach(r => {
+    const v = (r[field] || 'Unknown').toString().trim() || 'Unknown';
+    map[v] = (map[v] || 0) + 1;
+  });
+  return Object.entries(map).sort((a,b) => b[1] - a[1]);
+}
+
+function initExplorer() {
+  const yearsFromMonthly = [...new Set((appData.monthly?.monthly || []).map(m => m.month.split('-')[0]))].sort();
+  explorerYearsAvailable = yearsFromMonthly;
+
+  if (!explorerInitialized) {
+    explorerState.years = new Set(explorerYearsAvailable);
+    explorerState.months = new Set(explorerMonthsAvailable);
+    explorerState.dept = '';
+    explorerInitialized = true;
+  } else {
+    // Keep selections that are still valid; newly appeared years default to included
+    const kept = new Set([...explorerState.years].filter(y => explorerYearsAvailable.includes(y)));
+    explorerYearsAvailable.forEach(y => { if (!explorerState.years.size) kept.add(y); });
+    explorerState.years = kept.size ? kept : new Set(explorerYearsAvailable);
+  }
+
+  renderMultiselectOptions('year', explorerYearsAvailable, explorerState.years, y => y);
+  renderMultiselectOptions('month', explorerMonthsAvailable, explorerState.months, m => MONTH_NAMES[m-1]);
+  populateExplorerDeptFilter();
+  updateMultiselectLabels();
+  updateExplorerChips();
+  applyExplorerFilters();
+}
+
+function renderMultiselectOptions(type, list, selectedSet, labelFn) {
+  const container = document.getElementById(type + 'Options');
+  if (!container) return;
+  container.innerHTML = list.map(val => {
+    const checked = selectedSet.has(val) ? 'checked' : '';
+    return `
+      <label class="multiselect-option">
+        <input type="checkbox" ${checked} onchange="onMultiselectChange('${type}', '${val}', this.checked)">
+        ${labelFn(val)}
+      </label>
+    `;
+  }).join('');
+}
+
+function onMultiselectChange(type, value, checked) {
+  const set = type === 'year' ? explorerState.years : explorerState.months;
+  const key = type === 'year' ? value : parseInt(value);
+  if (checked) set.add(key); else set.delete(key);
+  updateMultiselectLabels();
+  updateExplorerChips();
+  applyExplorerFilters();
+}
+
+function selectAllChips(type) {
+  if (type === 'year') explorerState.years = new Set(explorerYearsAvailable);
+  else explorerState.months = new Set(explorerMonthsAvailable);
+  renderMultiselectOptions(type, type === 'year' ? explorerYearsAvailable : explorerMonthsAvailable,
+    type === 'year' ? explorerState.years : explorerState.months,
+    type === 'year' ? (y => y) : (m => MONTH_NAMES[m-1]));
+  updateMultiselectLabels();
+  updateExplorerChips();
+  applyExplorerFilters();
+}
+
+function clearChips(type) {
+  if (type === 'year') explorerState.years = new Set();
+  else explorerState.months = new Set();
+  renderMultiselectOptions(type, type === 'year' ? explorerYearsAvailable : explorerMonthsAvailable,
+    type === 'year' ? explorerState.years : explorerState.months,
+    type === 'year' ? (y => y) : (m => MONTH_NAMES[m-1]));
+  updateMultiselectLabels();
+  updateExplorerChips();
+  applyExplorerFilters();
+}
+
+function toggleMultiselect(type) {
+  const el = document.getElementById(type + 'Multiselect');
+  const isOpen = el.classList.contains('open');
+  document.querySelectorAll('.multiselect').forEach(m => m.classList.remove('open'));
+  if (!isOpen) el.classList.add('open');
+}
+
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('.multiselect').forEach(m => {
+    if (!m.contains(e.target)) m.classList.remove('open');
+  });
+});
+
+function updateMultiselectLabels() {
+  const yLabel = document.getElementById('yearMultiselectLabel');
+  const mLabel = document.getElementById('monthMultiselectLabel');
+  if (!yLabel || !mLabel) return;
+  const ys = explorerState.years, ms = explorerState.months;
+
+  if (ys.size === 0) yLabel.textContent = 'No years selected';
+  else if (ys.size === explorerYearsAvailable.length) yLabel.textContent = 'All years';
+  else if (ys.size === 1) yLabel.textContent = [...ys][0];
+  else yLabel.textContent = `${ys.size} years selected`;
+
+  if (ms.size === 0) mLabel.textContent = 'No months selected';
+  else if (ms.size === explorerMonthsAvailable.length) mLabel.textContent = 'All months';
+  else if (ms.size === 1) mLabel.textContent = MONTH_NAMES[[...ms][0]-1];
+  else mLabel.textContent = `${ms.size} months selected`;
+}
+
+function updateExplorerChips() {
+  const container = document.getElementById('explorerActiveChips');
+  if (!container) return;
+  const chips = [];
+  const ys = explorerState.years, ms = explorerState.months;
+
+  if (ys.size !== explorerYearsAvailable.length) {
+    chips.push(`Years: ${ys.size ? [...ys].sort().join(', ') : 'none'}`);
+  }
+  if (ms.size !== explorerMonthsAvailable.length) {
+    chips.push(`Months: ${ms.size ? [...ms].sort((a,b)=>a-b).map(m=>MONTH_NAMES[m-1]).join(', ') : 'none'}`);
+  }
+  if (explorerState.dept) chips.push(`Dept: ${explorerState.dept}`);
+
+  container.innerHTML = chips.length
+    ? chips.map(c => `<span class="filter-chip">${c}</span>`).join('')
+    : `<span class="filter-chip dim">Showing all data — no filters applied</span>`;
+}
+
+function populateExplorerDeptFilter() {
+  const sel = document.getElementById('explorerDeptFilter');
+  if (!sel) return;
+  const depts = Object.keys(appData.stats.byDepartment || {}).sort();
+  const current = explorerState.dept;
+  sel.innerHTML = `<option value="">All departments</option>` + depts.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel.value = depts.includes(current) ? current : '';
+  explorerState.dept = sel.value;
+}
+
+function resetExplorerFilters() {
+  explorerState.years = new Set(explorerYearsAvailable);
+  explorerState.months = new Set(explorerMonthsAvailable);
+  explorerState.dept = '';
+  const deptSel = document.getElementById('explorerDeptFilter');
+  if (deptSel) deptSel.value = '';
+  renderMultiselectOptions('year', explorerYearsAvailable, explorerState.years, y => y);
+  renderMultiselectOptions('month', explorerMonthsAvailable, explorerState.months, m => MONTH_NAMES[m-1]);
+  updateMultiselectLabels();
+  updateExplorerChips();
+  applyExplorerFilters();
+}
+
+function applyExplorerFilters() {
+  const deptSel = document.getElementById('explorerDeptFilter');
+  if (deptSel) explorerState.dept = deptSel.value;
+  updateExplorerChips();
+
+  const allRows = appData.raw?.data || [];
+  const emptyState = document.getElementById('explorerEmptyState');
+  const emptyDivs = emptyState ? emptyState.querySelectorAll('div') : [];
+
+  if (!allRows.length) {
+    if (emptyState) {
+      emptyState.style.display = 'block';
+      if (emptyDivs[0]) emptyDivs[0].textContent = 'Explorer needs live data';
+      if (emptyDivs[1]) emptyDivs[1].textContent = 'Connect your Apps Script URL to cross-analyze by year, month, and department';
+    }
+    clearExplorerCharts();
+    setExplorerKpisEmpty();
+    return;
+  }
+
+  const filtered = allRows.filter(r => {
+    if (!r['Date']) return false;
+    const d = new Date(r['Date']);
+    if (isNaN(d)) return false;
+    const y = d.getFullYear().toString();
+    const m = d.getMonth() + 1;
+    if (!explorerState.years.has(y)) return false;
+    if (!explorerState.months.has(m)) return false;
+    if (explorerState.dept && (r['Dept']||'').toString().trim() !== explorerState.dept) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    if (emptyState) {
+      emptyState.style.display = 'block';
+      if (emptyDivs[0]) emptyDivs[0].textContent = 'No records match this selection';
+      if (emptyDivs[1]) emptyDivs[1].textContent = 'Try selecting different years, months, or clear the department filter';
+    }
+    clearExplorerCharts();
+    setExplorerKpisEmpty();
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+  renderExplorerKpis(filtered, allRows);
+  renderExplorerTrend(filtered);
+  renderExplorerDeptChart(filtered);
+  renderExplorerGenderChart(filtered);
+  renderExplorerInjuryChart(filtered);
+  renderExplorerNatureChart(filtered);
+  renderExplorerBodyChart(filtered);
+  renderExplorerSectionChart(filtered);
+  renderExplorerMatrixChart(filtered);
+}
+
+function clearExplorerCharts() {
+  ['expTrend','expDept','expGender','expInjury','expNature','expBody','expSection','expMatrix'].forEach(k => {
+    if (charts[k]) { charts[k].destroy(); delete charts[k]; }
+  });
+}
+
+function setExplorerKpisEmpty() {
+  const totalEl = document.getElementById('exp-kpi-total');
+  const avgEl = document.getElementById('exp-kpi-avg');
+  if (totalEl) totalEl.textContent = '0';
+  if (avgEl) avgEl.textContent = '0';
+  const totalSub = document.getElementById('exp-kpi-total-sub');
+  const avgSub = document.getElementById('exp-kpi-avg-sub');
+  if (totalSub) totalSub.textContent = 'of all records';
+  if (avgSub) avgSub.textContent = 'across selected months';
+  const deptEl = document.getElementById('exp-kpi-dept');
+  const deptSub = document.getElementById('exp-kpi-dept-sub');
+  if (deptEl) deptEl.textContent = '—';
+  if (deptSub) deptSub.textContent = 'in this selection';
+  const genderEl = document.getElementById('exp-kpi-gender');
+  const genderSub = document.getElementById('exp-kpi-gender-sub');
+  if (genderEl) genderEl.textContent = '—';
+  if (genderSub) genderSub.textContent = '—';
+}
+
+function renderExplorerKpis(filtered, allRows) {
+  animateCounter(document.getElementById('exp-kpi-total'), filtered.length);
+  const pctOfAll = allRows.length ? ((filtered.length/allRows.length)*100).toFixed(1) : 0;
+  document.getElementById('exp-kpi-total-sub').textContent = `${pctOfAll}% of ${allRows.length} total records`;
+
+  const ymSet = new Set(filtered.map(r => { const d = new Date(r['Date']); return d.getFullYear()+'-'+d.getMonth(); }));
+  const avg = ymSet.size ? Math.round(filtered.length / ymSet.size) : filtered.length;
+  animateCounter(document.getElementById('exp-kpi-avg'), avg);
+  document.getElementById('exp-kpi-avg-sub').textContent = `across ${ymSet.size} month${ymSet.size===1?'':'s'} in selection`;
+
+  const deptTally = tallyBy(filtered, 'Dept');
+  const deptEl = document.getElementById('exp-kpi-dept');
+  const deptSub = document.getElementById('exp-kpi-dept-sub');
+  if (deptTally.length) {
+    deptEl.textContent = deptTally[0][0].length > 16 ? deptTally[0][0].slice(0,14)+'…' : deptTally[0][0];
+    deptSub.textContent = `${deptTally[0][1]} incidents in selection`;
+  } else {
+    deptEl.textContent = '—';
+    deptSub.textContent = 'in this selection';
+  }
+
+  const genderMap = Object.fromEntries(tallyBy(filtered, 'Gender'));
+  const m = genderMap['Male'] || 0, f = genderMap['Female'] || 0;
+  const pct = (m+f) ? Math.round(m/(m+f)*100) : 0;
+  document.getElementById('exp-kpi-gender').textContent = (m+f) ? `${pct}% M` : '—';
+  document.getElementById('exp-kpi-gender-sub').textContent = (m+f) ? `${m} male, ${f} female` : 'no gender data';
+}
+
+function renderExplorerTrend(filtered) {
+  const canvas = document.getElementById('explorerTrendChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (charts.expTrend) charts.expTrend.destroy();
+
+  const map = {};
+  filtered.forEach(r => {
+    const d = new Date(r['Date']);
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    map[key] = (map[key] || 0) + 1;
+  });
+  const sorted = Object.entries(map).sort((a,b) => a[0].localeCompare(b[0]));
+  const labels = sorted.map(([k]) => { const [y,m] = k.split('-'); return `${MONTH_NAMES[+m-1]} ${y}`; });
+
+  const gradient = ctx.createLinearGradient(0,0,0,200);
+  gradient.addColorStop(0, 'rgba(37,99,235,0.16)');
+  gradient.addColorStop(1, 'rgba(37,99,235,0)');
+
+  charts.expTrend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: sorted.map(([,v]) => v),
+        borderColor: '#2563eb', backgroundColor: gradient,
+        borderWidth: 2.5, tension: 0.4, fill: true,
+        pointRadius: sorted.length > 24 ? 0 : 3,
+        pointBackgroundColor: '#2563eb', pointBorderColor: '#fff', pointBorderWidth: 2,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 16, maxRotation: 0 } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+      }
+    }
+  });
+
+  const sub = document.getElementById('expTrendSub');
+  if (sub) sub.textContent = `${sorted.length} month${sorted.length===1?'':'s'} in selection`;
+}
+
+function renderExplorerDeptChart(filtered) {
+  const canvas = document.getElementById('explorerDeptChart');
+  if (!canvas) return;
+  if (charts.expDept) charts.expDept.destroy();
+  const sorted = tallyBy(filtered, 'Dept').slice(0,10);
+  charts.expDept = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: COLORS.slice(0,sorted.length||1), borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: { x: { grid:{color:GRID}, border:{color:BORDER}, beginAtZero:true }, y: { grid:{display:false}, border:{color:BORDER} } }
+    }
+  });
+}
+
+function renderExplorerGenderChart(filtered) {
+  const canvas = document.getElementById('explorerGenderChart');
+  if (!canvas) return;
+  if (charts.expGender) charts.expGender.destroy();
+  const tally = tallyBy(filtered, 'Gender');
+  charts.expGender = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: ['#2563eb','#db2777','#94a3b8','#7c3aed'], borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '64%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 8, padding: 12, color: '#475569' } } }
+    }
+  });
+}
+
+function renderExplorerInjuryChart(filtered) {
+  const canvas = document.getElementById('explorerInjuryChart');
+  if (!canvas) return;
+  if (charts.expInjury) charts.expInjury.destroy();
+  const sorted = tallyBy(filtered, 'Type of Injury').slice(0,8);
+  charts.expInjury = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: COLORS.slice(0,sorted.length||1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+}
+
+function renderExplorerNatureChart(filtered) {
+  const canvas = document.getElementById('explorerNatureChart');
+  if (!canvas) return;
+  if (charts.expNature) charts.expNature.destroy();
+  const sorted = tallyBy(filtered, 'Nature of Incident').slice(0,8);
+  charts.expNature = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: sorted.map(([k])=>k.length>22?k.slice(0,20)+'…':k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#d97706', borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: { x: { grid:{color:GRID}, border:{color:BORDER}, beginAtZero:true }, y: { grid:{display:false}, border:{color:BORDER} } }
+    }
+  });
+}
+
+function renderExplorerBodyChart(filtered) {
+  const canvas = document.getElementById('explorerBodyChart');
+  if (!canvas) return;
+  if (charts.expBody) charts.expBody.destroy();
+  const sorted = tallyBy(filtered, 'Affected part').slice(0,8);
+  charts.expBody = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#7c3aed', borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: { x: { grid:{color:GRID}, border:{color:BORDER}, beginAtZero:true }, y: { grid:{display:false}, border:{color:BORDER} } }
+    }
+  });
+}
+
+function renderExplorerSectionChart(filtered) {
+  const canvas = document.getElementById('explorerSectionChart');
+  if (!canvas) return;
+  if (charts.expSection) charts.expSection.destroy();
+  const sorted = tallyBy(filtered, 'Section').slice(0,8);
+  charts.expSection = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: sorted.map(([k])=>k), datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#059669', borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: { x: { grid:{color:GRID}, border:{color:BORDER}, beginAtZero:true }, y: { grid:{display:false}, border:{color:BORDER} } }
+    }
+  });
+}
+
+function renderExplorerMatrixChart(filtered) {
+  const canvas = document.getElementById('explorerMatrixChart');
+  if (!canvas) return;
+  if (charts.expMatrix) charts.expMatrix.destroy();
+
+  const deptList = tallyBy(filtered, 'Dept').slice(0,8).map(([k]) => k);
+  const maleData = [], femaleData = [], otherData = [];
+
+  deptList.forEach(dept => {
+    let male = 0, female = 0, other = 0;
+    filtered.forEach(r => {
+      if ((r['Dept']||'').toString().trim() !== dept) return;
+      const g = (r['Gender']||'').toString().trim();
+      if (g === 'Male') male++; else if (g === 'Female') female++; else other++;
+    });
+    maleData.push(male); femaleData.push(female); otherData.push(other);
+  });
+
+  const datasets = [
+    { label: 'Male', data: maleData, backgroundColor: '#2563eb', borderRadius: 4 },
+    { label: 'Female', data: femaleData, backgroundColor: '#db2777', borderRadius: 4 }
+  ];
+  if (otherData.some(v => v > 0)) datasets.push({ label: 'Other/Unknown', data: otherData, backgroundColor: '#94a3b8', borderRadius: 4 });
+
+  charts.expMatrix = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: deptList, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, boxHeight: 12, color: '#475569', font: { size: 11 } } } },
+      scales: {
+        x: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, ticks: { maxRotation: 30 } },
+        y: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+      }
+    }
+  });
+}
 
 // ── Init ──────────────────────────────────────────────────────
 loadAll();
