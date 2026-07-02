@@ -1176,6 +1176,12 @@ function renderPrediction(p, cachedAt) {
   const prev = p.previousMonth || null;
 
   const riskColor = { Low:'#059669', Medium:'#d97706', High:'#dc2626', Critical:'#dc2626' }[curr.riskLevel] || '#2563eb';
+  const severityColors = {
+    Low:      { bg: 'var(--green-dim)', fg: '#059669' },
+    Moderate: { bg: 'var(--amber-dim)', fg: '#d97706' },
+    Elevated: { bg: 'rgba(234,88,12,0.10)', fg: '#c2410c' },
+    Severe:   { bg: 'var(--red-dim)',  fg: '#dc2626' }
+  };
 
   const tabsHtml = prev ? `
     <div class="pred-tabs">
@@ -1188,14 +1194,30 @@ function renderPrediction(p, cachedAt) {
     </div>
   ` : '';
 
+  const sevLevel = prev?.severityAssessment?.level;
+  const sevColor = severityColors[sevLevel] || { bg: 'var(--border)', fg: 'var(--muted)' };
+
   const reviewHtml = prev ? `
   <div class="pred-tab-content active" id="pred-tab-review">
     <div class="review-hero">
       <div class="review-hero-label">Monthly Review — ${prev.label}</div>
       <div class="review-hero-count">${prev.actualIncidents ?? '—'}</div>
       <div class="review-hero-sub">Total incidents recorded in ${prev.label}</div>
+      ${sevLevel ? `<span class="severity-pill" style="background:${sevColor.bg};color:${sevColor.fg}">Severity: ${sevLevel}</span>` : ''}
       <div class="review-hero-summary">${prev.summary || ''}</div>
     </div>
+
+    ${(prev.yearOverYearComparison?.insight || prev.vsHistoricalAverage) ? `
+    <div class="review-grid">
+      <div class="review-card">
+        <div class="review-card-title">Year-over-Year</div>
+        <div class="review-insight-text">${prev.yearOverYearComparison?.insight || '—'}</div>
+      </div>
+      <div class="review-card">
+        <div class="review-card-title">vs Historical Average</div>
+        <div class="review-insight-text">${prev.vsHistoricalAverage || '—'}</div>
+      </div>
+    </div>` : ''}
 
     <div class="review-grid">
       <div class="review-card">
@@ -1217,6 +1239,32 @@ function renderPrediction(p, cachedAt) {
         `).join('')}
       </div>
     </div>
+
+    ${(prev.sectionHotspots || []).length ? `
+    <div class="section-header"><div class="section-title">Section-level hotspots</div></div>
+    <div class="review-card" style="margin-bottom:18px">
+      ${prev.sectionHotspots.map(s => `
+        <div class="hotspot-row">
+          <div>
+            <div class="hotspot-name">${s.section}</div>
+            ${s.note ? `<div class="hotspot-note">${s.note}</div>` : ''}
+          </div>
+          <div class="hotspot-count">${s.count}</div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+
+    ${(prev.genderAnalysis?.insight || prev.bodyPartInsight) ? `
+    <div class="review-grid">
+      <div class="review-card">
+        <div class="review-card-title">Gender Pattern</div>
+        <div class="review-insight-text">${prev.genderAnalysis?.insight || '—'}</div>
+      </div>
+      <div class="review-card">
+        <div class="review-card-title">Body Part Insight</div>
+        <div class="review-insight-text">${prev.bodyPartInsight || '—'}</div>
+      </div>
+    </div>` : ''}
 
     <div class="section-header"><div class="section-title">Root cause themes</div></div>
     ${(prev.rootCauseThemes || []).map(r => `
@@ -1264,9 +1312,10 @@ function renderPrediction(p, cachedAt) {
       </div>
     </div>
 
-    ${curr.trendInsight || curr.seasonalFactors ? `
+    ${curr.trendInsight || curr.seasonalFactors || curr.benchmarkComparison ? `
     <div class="pred-factors">
       ${curr.trendInsight ? `<div><span class="factor-label trend">Trend</span>${curr.trendInsight}</div>` : ''}
+      ${curr.benchmarkComparison ? `<div style="margin-top:6px"><span class="factor-label" style="color:var(--purple)">Benchmark</span>${curr.benchmarkComparison}</div>` : ''}
       ${curr.seasonalFactors ? `<div style="margin-top:6px"><span class="factor-label season">Seasonal</span>${curr.seasonalFactors}</div>` : ''}
     </div>` : ''}
 
@@ -1274,7 +1323,21 @@ function renderPrediction(p, cachedAt) {
     <div class="section-header"><div class="section-title">High-risk departments</div></div>
     <div class="dept-tags">${curr.highRiskDepartments.map(d=>`<span class="dept-tag">${d}</span>`).join('')}</div>` : ''}
 
-    <div class="section-header"><div class="section-title">Top risk factors</div></div>
+    ${(curr.departmentRiskRanking||[]).length ? `
+    <div class="section-header" style="margin-top:18px"><div class="section-title">Department risk ranking</div></div>
+    ${curr.departmentRiskRanking.map(d => {
+      const rc = d.riskScore === 'High' ? { bg: 'var(--red-dim)', fg: '#dc2626' } : d.riskScore === 'Medium' ? { bg: 'var(--amber-dim)', fg: '#d97706' } : { bg: 'var(--green-dim)', fg: '#059669' };
+      return `
+      <div class="dept-risk-item">
+        <div>
+          <div class="dept-risk-name">${d.dept}</div>
+          <div class="dept-risk-rationale">${d.rationale}</div>
+        </div>
+        <span class="dept-risk-badge" style="background:${rc.bg};color:${rc.fg}">${d.riskScore}</span>
+      </div>`;
+    }).join('')}` : ''}
+
+    <div class="section-header" style="margin-top:18px"><div class="section-title">Top risk factors</div></div>
     <div class="risk-cards">
       ${(curr.topRisks||[]).map(r => {
         const likeColor = r.likelihood==='High' ? 'badge-red' : r.likelihood==='Medium' ? 'badge-amber' : 'badge-green';
@@ -1340,6 +1403,27 @@ const DEMO_PREDICTION = {
       { dept: "Engineering", count: 5 },
       { dept: "ETD", count: 3 }
     ],
+    sectionHotspots: [
+      { section: "Spring Setting", count: 6, note: "Chemical handling + tight clearance work" },
+      { section: "CED", count: 5, note: "Drilling and cutting operations" },
+      { section: "Plant B", count: 4, note: "Latex collection line" },
+      { section: "Canteen", count: 2, note: "Wet floor during peak hours" }
+    ],
+    genderAnalysis: {
+      maleCount: 17, femaleCount: 7,
+      insight: "Male workers accounted for 71% of incidents, concentrated in Primary Production and Engineering where physical handling tasks dominate. Female incidents clustered in Packing, mostly minor abrasions from repetitive material handling."
+    },
+    bodyPartInsight: "Hands and fingers accounted for over 40% of all injuries this month, consistent with the facility's historical pattern — manual handling of foil rolls, crates, and drilling equipment remains the primary ergonomic risk driver.",
+    severityAssessment: {
+      level: "Moderate",
+      rationale: "No lost-time injuries or fractures recorded; the injury mix was dominated by abrasions and pain/swelling, which are lower-severity but high-frequency categories."
+    },
+    yearOverYearComparison: {
+      sameMonthLastYear: 21,
+      changePercent: 14,
+      insight: "14% higher than June 2025 (21 incidents), continuing a gradual upward trend seen across the last three years."
+    },
+    vsHistoricalAverage: "8% above the 5-year historical average of 22 incidents for the month of June.",
     rootCauseThemes: [
       { theme: "Hand tool contact", detail: "Manual handling of foil rolls, crates, and metal rod components without adequate grip protection led to the majority of abrasion cases." },
       { theme: "Eye protection compliance", detail: "Five foreign body eye incidents in CED and Mechanical suggest inconsistent use of safety goggles during drilling and cutting operations." },
@@ -1357,6 +1441,13 @@ const DEMO_PREDICTION = {
     predictedIncidents: 27,
     confidencePercent: 76,
     summary: "Building on June's patterns, July carries elevated risk due to monsoon onset in Kerala combined with high production load. The unresolved eye protection compliance gap from June is likely to carry over, and wet-floor risks will intensify with monsoon rains tracked into factory entrances.",
+    benchmarkComparison: "27 predicted incidents would be 12% above the 5-year historical average of 24 for the month of July, continuing the upward seasonal pattern.",
+    departmentRiskRanking: [
+      { dept: "Primary Production", riskScore: "High", rationale: "Highest incident concentration + sustained 3-year upward trend" },
+      { dept: "Packing", riskScore: "High", rationale: "Second-highest volume, repetitive strain and abrasion pattern unresolved" },
+      { dept: "Engineering", riskScore: "Medium", rationale: "Eye protection compliance gap carried over from June" },
+      { dept: "ETD", riskScore: "Low", rationale: "Stable incident rate, no emerging risk signal" }
+    ],
     topRisks: [
       { risk: "Hand/Finger contact injuries", likelihood: "High", impact: "High", detail: "Abrasion and laceration risk remains high in Packing and Primary Production through July." },
       { risk: "Eye foreign body — CED & Mechanical", likelihood: "High", impact: "Medium", detail: "Unresolved compliance gap from June makes repeat eye incidents probable without intervention." },
