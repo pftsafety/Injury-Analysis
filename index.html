@@ -692,6 +692,19 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .review-hero-summary { font-size: 13px; color: var(--text); line-height: 1.75; }
 @media (max-width: 768px) { .review-grid { grid-template-columns: 1fr; } }
 
+/* ── Deeper analysis components ── */
+.review-insight-text { font-size: 12px; color: var(--text); line-height: 1.7; }
+.hotspot-row { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); gap: 10px; }
+.hotspot-row:last-child { border-bottom: none; }
+.hotspot-name { font-size: 12px; font-weight: 600; color: var(--text); }
+.hotspot-note { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.hotspot-count { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); flex-shrink: 0; }
+.dept-risk-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--card2); border: 1px solid var(--border); border-radius: 9px; margin-bottom: 7px; gap: 10px; }
+.dept-risk-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.dept-risk-rationale { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.dept-risk-badge { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+.severity-pill { display: inline-block; padding: 3px 11px; border-radius: 20px; font-size: 10px; font-weight: 700; margin-bottom: 12px; }
+
 /* ── Email button ── */
 .btn-email {
   display: inline-flex; align-items: center; gap: 7px;
