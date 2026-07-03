@@ -141,6 +141,7 @@ function loadDemoData() {
     raw: { data: [], total },
     repeatIncidents: {
       totalRepeatEmployees: 6,
+      periodLabel: "Since Mar 2023",
       employees: [
         { name: "Sabarinath", cardNo: "700880", totalIncidents: 4, firstIncidentDate: "12 Jan 2024", lastIncidentDate: "15 Feb 2024", spanDays: 34, primaryDept: "Engineering", primaryInjuryType: "Abrasion" },
         { name: "Vijayan", cardNo: "108", totalIncidents: 3, firstIncidentDate: "03 Mar 2023", lastIncidentDate: "27 Feb 2024", spanDays: 361, primaryDept: "Packing", primaryInjuryType: "Abrasion" },
@@ -1289,7 +1290,7 @@ function renderPrediction(p, cachedAt) {
     </div>` : ''}
 
     ${(appData.repeatIncidents?.employees || []).length ? `
-    <div class="section-header"><div class="section-title">Repeat-incident employee watchlist (all-time)</div></div>
+    <div class="section-header"><div class="section-title">Repeat-incident employee watchlist (${appData.repeatIncidents?.periodLabel || 'Since Mar 2023'})</div></div>
     <div class="watchlist-sub">${appData.repeatIncidents.totalRepeatEmployees} employee(s) on record with 2+ incidents · showing top ${Math.min(10, appData.repeatIncidents.employees.length)}</div>
     <div class="watchlist-table">
       ${appData.repeatIncidents.employees.slice(0, 10).map(emp => `
