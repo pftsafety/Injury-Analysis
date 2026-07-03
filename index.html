@@ -705,6 +705,46 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .dept-risk-badge { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
 .severity-pill { display: inline-block; padding: 3px 11px; border-radius: 20px; font-size: 10px; font-weight: 700; margin-bottom: 12px; }
 
+/* ── Repeat-incident components ── */
+.acute-alert {
+  background: var(--red-dim);
+  border: 1px solid rgba(220,38,38,0.25);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.acute-alert-title { font-size: 12px; font-weight: 700; color: var(--red); margin-bottom: 6px; }
+.acute-alert-row { font-size: 12px; color: var(--text); padding: 3px 0; }
+.acute-alert-card { font-size: 10px; color: var(--muted); }
+
+.watchlist-sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.watchlist-table { margin-bottom: 18px; }
+.watchlist-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.2fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  margin-bottom: 7px;
+}
+.watchlist-emp-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.watchlist-emp-card { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.watchlist-meta { font-size: 11px; color: var(--muted2); line-height: 1.5; }
+.watchlist-dept { font-weight: 600; }
+.watchlist-injury { color: var(--muted); }
+.watchlist-span { font-size: 10px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; }
+.watchlist-count {
+  font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--red);
+  text-align: right; flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .watchlist-row { grid-template-columns: 1fr; gap: 4px; }
+  .watchlist-span { display: none; }
+}
+
 /* ── Email button ── */
 .btn-email {
   display: inline-flex; align-items: center; gap: 7px;
