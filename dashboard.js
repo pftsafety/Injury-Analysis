@@ -81,10 +81,10 @@ async function loadAll() {
   }
 
   try {
-    const [stats, monthly, injury, raw] = await Promise.all([
-      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000')
+    const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary] = await Promise.all([
+      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary')
     ]);
-    appData = { stats, monthly, injury, raw };
+    appData = { stats, monthly, injury, raw, repeatIncidents, prevMonthSummary };
     renderAll();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
     loadPrediction();
@@ -138,7 +138,21 @@ function loadDemoData() {
       injuryTypes: Object.fromEntries(injTypes.map((t,i) => [t, Math.round(total*(0.35-i*0.04))])),
       natures: Object.fromEntries(natures.map((n,i) => [n, Math.round(total*(0.25-i*0.03))]))
     },
-    raw: { data: [], total }
+    raw: { data: [], total },
+    repeatIncidents: {
+      totalRepeatEmployees: 6,
+      employees: [
+        { name: "Sabarinath", cardNo: "700880", totalIncidents: 4, firstIncidentDate: "12 Jan 2024", lastIncidentDate: "15 Feb 2024", spanDays: 34, primaryDept: "Engineering", primaryInjuryType: "Abrasion" },
+        { name: "Vijayan", cardNo: "108", totalIncidents: 3, firstIncidentDate: "03 Mar 2023", lastIncidentDate: "27 Feb 2024", spanDays: 361, primaryDept: "Packing", primaryInjuryType: "Abrasion" },
+        { name: "Kiran", cardNo: "102347", totalIncidents: 2, firstIncidentDate: "19 Aug 2023", lastIncidentDate: "27 Feb 2024", spanDays: 192, primaryDept: "Engineering", primaryInjuryType: "Foreign Body" },
+        { name: "Rahul R P", cardNo: "507089", totalIncidents: 2, firstIncidentDate: "22 Sep 2023", lastIncidentDate: "15 Feb 2024", spanDays: 146, primaryDept: "Primary Production", primaryInjuryType: "Trauma" }
+      ]
+    },
+    prevMonthSummary: {
+      repeatIncidentsThisMonth: [
+        { name: "Sabarinath", cardNo: "700880", count: 2 }
+      ]
+    }
   };
   renderAll();
   document.getElementById('lastSync').textContent = 'Demo mode';
@@ -1207,6 +1221,14 @@ function renderPrediction(p, cachedAt) {
       <div class="review-hero-summary">${prev.summary || ''}</div>
     </div>
 
+    ${(appData.prevMonthSummary?.repeatIncidentsThisMonth || []).length ? `
+    <div class="acute-alert">
+      <div class="acute-alert-title">⚠ ${appData.prevMonthSummary.repeatIncidentsThisMonth.length} employee(s) injured more than once in ${prev.label}</div>
+      ${appData.prevMonthSummary.repeatIncidentsThisMonth.map(e => `
+        <div class="acute-alert-row">${e.name}${e.cardNo ? ` <span class="acute-alert-card">(Card: ${e.cardNo})</span>` : ''} — <strong>${e.count} incidents</strong> this month</div>
+      `).join('')}
+    </div>` : ''}
+
     ${(prev.yearOverYearComparison?.insight || prev.vsHistoricalAverage) ? `
     <div class="review-grid">
       <div class="review-card">
@@ -1264,6 +1286,26 @@ function renderPrediction(p, cachedAt) {
         <div class="review-card-title">Body Part Insight</div>
         <div class="review-insight-text">${prev.bodyPartInsight || '—'}</div>
       </div>
+    </div>` : ''}
+
+    ${(appData.repeatIncidents?.employees || []).length ? `
+    <div class="section-header"><div class="section-title">Repeat-incident employee watchlist (all-time)</div></div>
+    <div class="watchlist-sub">${appData.repeatIncidents.totalRepeatEmployees} employee(s) on record with 2+ incidents · showing top ${Math.min(10, appData.repeatIncidents.employees.length)}</div>
+    <div class="watchlist-table">
+      ${appData.repeatIncidents.employees.slice(0, 10).map(emp => `
+        <div class="watchlist-row">
+          <div class="watchlist-emp">
+            <div class="watchlist-emp-name">${emp.name}</div>
+            ${emp.cardNo ? `<div class="watchlist-emp-card">Card: ${emp.cardNo}</div>` : ''}
+          </div>
+          <div class="watchlist-meta">
+            <div class="watchlist-dept">${emp.primaryDept || '—'}</div>
+            <div class="watchlist-injury">${emp.primaryInjuryType || '—'}</div>
+          </div>
+          <div class="watchlist-span">${emp.firstIncidentDate || '—'} → ${emp.lastIncidentDate || '—'}</div>
+          <div class="watchlist-count">${emp.totalIncidents}</div>
+        </div>
+      `).join('')}
     </div>` : ''}
 
     <div class="section-header"><div class="section-title">Root cause themes</div></div>
