@@ -9,6 +9,12 @@ Chart.defaults.color = "#475569";
 Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
 Chart.defaults.font.size = 11;
 Chart.defaults.plugins.legend.display = false;
+Chart.defaults.plugins.title.font = { size: 12, weight: '600', family: "'Space Grotesk', sans-serif" };
+Chart.defaults.plugins.title.color = "#0f172a";
+Chart.defaults.plugins.title.padding = { bottom: 12 };
+
+// Shared axis label helper
+function axisLabel(text) { return { display: true, text: text, color: '#64748b', font: { size: 10 } }; }
 
 // Global tooltip theme — fixes white-on-white text bug.
 // Individual chart tooltip configs only need backgroundColor/borderColor;
@@ -41,7 +47,7 @@ function showView(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
-  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', prediction:'AI Prediction' };
+  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', prediction:'AI Prediction' };
   document.getElementById('viewTitle').textContent = titles[id] || id;
 }
 
@@ -178,6 +184,7 @@ function renderAll() {
   renderBodyBars();
   renderSectionBars();
   renderSectionAllChart();
+  renderDeptTrendChart();
   renderTimeAnalysis();
   renderScorecard();
   renderInsightStrip();
@@ -186,6 +193,7 @@ function renderAll() {
   renderAlertBell();
   initRecordsTable();
   initExplorer();
+  initEmployeeSearch();
 }
 
 // ── KPIs ─────────────────────────────────────────────────────
@@ -535,8 +543,8 @@ function renderTrendChart() {
           tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10, titleColor: '#0f172a', bodyColor: '#475569', displayColors: true }
         },
         scales: {
-          x: { grid: { color: GRID }, border: { color: BORDER } },
-          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+          x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
         }
       }
     });
@@ -576,8 +584,8 @@ function renderTrendChart() {
           tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10, titleColor: '#0f172a', bodyColor: '#475569', displayColors: false }
         },
         scales: {
-          x: { grid: { color: GRID }, border: { color: BORDER } },
-          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+          x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
         }
       }
     });
@@ -622,8 +630,8 @@ function renderYearChart() {
       animation: { duration: 800, easing: 'easeOutQuart' },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER } },
-        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+        x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Year') },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
       }
     }
   });
@@ -692,7 +700,7 @@ function renderNatureChart() {
       animation: { duration: 800 },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') },
         y: { grid: { display: false }, border: { color: BORDER } }
       }
     }
@@ -712,7 +720,7 @@ function renderBodyChart() {
       animation: { duration: 800 },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') },
         y: { grid: { display: false }, border: { color: BORDER } }
       }
     }
@@ -732,7 +740,7 @@ function renderDeptAllChart() {
       animation: { duration: 800 },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') },
         y: { grid: { display: false }, border: { color: BORDER } }
       }
     }
@@ -773,11 +781,280 @@ function renderSectionAllChart() {
       animation: { duration: 800 },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true },
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') },
         y: { grid: { display: false }, border: { color: BORDER } }
       }
     }
   });
+}
+
+// ── Department-wise monthly trend (Trends view) ────────────────
+function renderDeptTrendChart() {
+  const canvas = document.getElementById('deptTrendChart');
+  if (!canvas) return;
+  if (charts.deptTrend) charts.deptTrend.destroy();
+
+  const rows = appData.raw?.data || [];
+  if (!rows.length) return; // demo mode / no live data — leave canvas empty, consistent with Time Analysis behavior
+
+  const monthsBack = parseInt(document.getElementById('deptTrendMonths')?.value || '12', 10);
+  const allMonths = (appData.monthly?.monthly || []).map(m => m.month);
+  const recentMonths = allMonths.slice(-monthsBack);
+
+  const deptTotals = {};
+  rows.forEach(r => {
+    const dept = (r['Dept'] || 'Unknown').toString().trim();
+    deptTotals[dept] = (deptTotals[dept] || 0) + 1;
+  });
+  const topDepts = Object.entries(deptTotals).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k])=>k);
+
+  const deptMonthMap = {};
+  topDepts.forEach(d => deptMonthMap[d] = {});
+  rows.forEach(r => {
+    if (!r['Date']) return;
+    const d = new Date(r['Date']);
+    if (isNaN(d)) return;
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const dept = (r['Dept'] || 'Unknown').toString().trim();
+    if (!topDepts.includes(dept)) return;
+    deptMonthMap[dept][key] = (deptMonthMap[dept][key] || 0) + 1;
+  });
+
+  const labels = recentMonths.map(m => {
+    const [y, mm] = m.split('-');
+    return `${MONTH_NAMES[+mm-1]} '${y.slice(2)}`;
+  });
+
+  const datasets = topDepts.map((dept, i) => ({
+    label: dept,
+    data: recentMonths.map(m => deptMonthMap[dept][m] || 0),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    tension: 0.35,
+    pointRadius: 2,
+    pointHoverRadius: 5,
+    fill: false
+  }));
+
+  charts.deptTrend = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 800 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } }
+      },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month'), ticks: { maxTicksLimit: 14 } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
+      }
+    }
+  });
+}
+
+// ── Employee Analysis ────────────────────────────────────────
+let empSearchDebounce = null;
+let empSuggestionCache = [];
+
+function initEmployeeSearch() {
+  const input = document.getElementById('empSearch');
+  if (!input) return;
+  // Close suggestions when clicking outside
+  document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('empSearchSuggestions');
+    if (wrap && !e.target.closest('#empSearch') && !e.target.closest('#empSearchSuggestions')) {
+      wrap.classList.remove('open');
+    }
+  });
+}
+
+function tallyRows(rows, field) {
+  const map = {};
+  rows.forEach(r => {
+    const v = (r[field] || 'Unknown').toString().trim() || 'Unknown';
+    map[v] = (map[v] || 0) + 1;
+  });
+  return Object.entries(map).sort((a,b) => b[1] - a[1]);
+}
+
+function getRowEmployeeKey(r) {
+  const cardNo = (r['Card No:'] || r['Card No'] || r['Card No.'] || '').toString().trim();
+  const name = (r['Name'] || '').toString().trim();
+  return { cardNo, name };
+}
+
+function onEmpSearch() {
+  const query = document.getElementById('empSearch').value.trim().toLowerCase();
+  const suggBox = document.getElementById('empSearchSuggestions');
+  if (empSearchDebounce) clearTimeout(empSearchDebounce);
+
+  if (query.length < 2) { suggBox.classList.remove('open'); return; }
+
+  empSearchDebounce = setTimeout(() => {
+    const rows = appData.raw?.data || [];
+    if (!rows.length) {
+      suggBox.innerHTML = `<div class="emp-suggestion-item" style="cursor:default"><div class="emp-suggestion-name" style="color:var(--muted)">Connect live data to search employees</div></div>`;
+      suggBox.classList.add('open');
+      return;
+    }
+
+    const map = {};
+    rows.forEach(r => {
+      const emp = getRowEmployeeKey(r);
+      if (!emp.name && !emp.cardNo) return;
+      const key = emp.cardNo ? 'card:' + emp.cardNo : 'name:' + emp.name.toLowerCase();
+      if (!map[key]) map[key] = { name: emp.name || 'Unknown', cardNo: emp.cardNo, count: 0 };
+      map[key].count++;
+    });
+
+    const matches = Object.values(map).filter(e =>
+      e.name.toLowerCase().includes(query) || (e.cardNo && e.cardNo.toLowerCase().includes(query))
+    ).sort((a,b) => b.count - a.count).slice(0, 8);
+
+    empSuggestionCache = matches;
+
+    if (!matches.length) {
+      suggBox.innerHTML = `<div class="emp-suggestion-item" style="cursor:default"><div class="emp-suggestion-name" style="color:var(--muted)">No matching employees found</div></div>`;
+      suggBox.classList.add('open');
+      return;
+    }
+
+    suggBox.innerHTML = matches.map((e, i) => `
+      <div class="emp-suggestion-item" onclick="selectEmployeeByIndex(${i})">
+        <div>
+          <div class="emp-suggestion-name">${e.name}</div>
+          <div class="emp-suggestion-meta">${e.cardNo ? 'Card: ' + e.cardNo : 'No card number'}</div>
+        </div>
+        <span class="emp-suggestion-count">${e.count}</span>
+      </div>
+    `).join('');
+    suggBox.classList.add('open');
+  }, 200);
+}
+
+function selectEmployeeByIndex(i) {
+  const e = empSuggestionCache[i];
+  if (!e) return;
+  document.getElementById('empSearch').value = e.name;
+  document.getElementById('empSearchSuggestions').classList.remove('open');
+  renderEmployeeProfile(e.name, e.cardNo);
+}
+
+function clearEmpSearch() {
+  document.getElementById('empSearch').value = '';
+  document.getElementById('empSearchSuggestions').classList.remove('open');
+  document.getElementById('empResults').style.display = 'none';
+  document.getElementById('empEmptyState').style.display = 'block';
+}
+
+function renderEmployeeProfile(name, cardNo) {
+  const rows = appData.raw?.data || [];
+  const matched = rows.filter(r => {
+    const emp = getRowEmployeeKey(r);
+    if (cardNo) return emp.cardNo === cardNo;
+    return emp.name.toLowerCase() === name.toLowerCase();
+  }).sort((a,b) => new Date(a['Date']) - new Date(b['Date']));
+
+  document.getElementById('empEmptyState').style.display = 'none';
+  document.getElementById('empResults').style.display = 'block';
+
+  const total = matched.length;
+  const dates = matched.map(r => new Date(r['Date'])).filter(d => !isNaN(d));
+  const firstDate = dates[0];
+  const lastDate = dates[dates.length - 1];
+  const spanDays = (firstDate && lastDate) ? Math.round((lastDate - firstDate) / 86400000) : 0;
+
+  const deptTally = tallyRows(matched, 'Dept');
+  const injTally = tallyRows(matched, 'Type of Injury');
+  const bodyTally = tallyRows(matched, 'Affected part');
+  const topDept = deptTally[0];
+  const topInjury = injTally[0];
+
+  document.getElementById('empKpiRow').innerHTML = `
+    <div class="kpi-card c-red">
+      <div class="kpi-icon c-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div class="kpi-label">Total Incidents</div>
+      <div class="kpi-value">${total}</div>
+      <div class="kpi-sub">${cardNo ? 'Card: ' + cardNo : name}</div>
+    </div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div>
+      <div class="kpi-label">Date Range</div>
+      <div class="kpi-value" style="font-size:14px;margin-top:6px">${firstDate ? firstDate.toLocaleDateString('en-GB') : '—'} → ${lastDate ? lastDate.toLocaleDateString('en-GB') : '—'}</div>
+      <div class="kpi-sub">${spanDays} day span</div>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div class="kpi-label">Most Common Injury</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${topInjury ? topInjury[0] : '—'}</div>
+      <div class="kpi-sub">${topInjury ? topInjury[1] + ' occurrence(s)' : ''}</div>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="kpi-label">Primary Department</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${topDept ? topDept[0] : '—'}</div>
+      <div class="kpi-sub">${topDept ? topDept[1] + ' incident(s)' : ''}</div>
+    </div>
+  `;
+
+  if (charts.empInjury) charts.empInjury.destroy();
+  charts.empInjury = new Chart(document.getElementById('empInjuryChart').getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: injTally.map(([k])=>k), datasets: [{ data: injTally.map(([,v])=>v), backgroundColor: COLORS.slice(0, injTally.length || 1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+  document.getElementById('empInjurySub').textContent = `${injTally.length} distinct injury type(s)`;
+
+  const monthMap = {};
+  matched.forEach(r => {
+    const d = new Date(r['Date']);
+    if (isNaN(d)) return;
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    monthMap[key] = (monthMap[key] || 0) + 1;
+  });
+  const sortedMonths = Object.entries(monthMap).sort((a,b) => a[0].localeCompare(b[0]));
+
+  if (charts.empTimeline) charts.empTimeline.destroy();
+  charts.empTimeline = new Chart(document.getElementById('empTimelineChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: sortedMonths.map(([k]) => { const [y,m] = k.split('-'); return `${MONTH_NAMES[+m-1]} '${y.slice(2)}`; }),
+      datasets: [{ data: sortedMonths.map(([,v]) => v), backgroundColor: '#dc2626', borderRadius: 4, maxBarThickness: 36 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 }, title: axisLabel('Incidents') }
+      }
+    }
+  });
+  document.getElementById('empTimelineSub').textContent = `Across ${sortedMonths.length} month(s) with activity`;
+
+  renderBarList('empDeptBars', deptTally, i => COLORS[i % COLORS.length]);
+  renderBarList('empBodyBars', bodyTally, () => '#7c3aed');
+
+  document.getElementById('empTableSub').textContent = `${total} incident${total===1?'':'s'} on record`;
+  document.getElementById('empTableBody').innerHTML = matched.slice().reverse().map(r => `
+    <tr>
+      <td style="white-space:nowrap;font-family:var(--font-mono);font-size:11px">${r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '—'}</td>
+      <td style="max-width:220px">${r['Description of Incident'] || '—'}</td>
+      <td>${r['Nature of Incident'] || '—'}</td>
+      <td><span class="badge badge-amber">${r['Type of Injury'] || '—'}</span></td>
+      <td>${r['Affected part'] || '—'}</td>
+      <td>${r['Section'] || '—'}</td>
+      <td>${r['Dept'] || '—'}</td>
+    </tr>
+  `).join('');
 }
 
 // ── Time Analysis ────────────────────────────────────────────
@@ -1030,13 +1307,21 @@ function onRecordSearch() {
 
 function getFilteredRecords() {
   const rows = appData.raw?.data || [];
-  return rows.filter(r => {
+  const filtered = rows.filter(r => {
     if (recordsState.dept && (r['Dept']||'').toString().trim() !== recordsState.dept) return false;
     if (recordsState.search) {
-      const haystack = [r['Name'], r['Dept'], r['Section'], r['Description of Incident'], r['Nature of Incident'], r['Type of Injury']].join(' ').toLowerCase();
+      const cardNo = (r['Card No:'] || r['Card No'] || r['Card No.'] || '').toString();
+      const haystack = [r['Name'], cardNo, r['Dept'], r['Section'], r['Description of Incident'], r['Nature of Incident'], r['Type of Injury']].join(' ').toLowerCase();
       if (!haystack.includes(recordsState.search)) return false;
     }
     return true;
+  });
+  // Sort descending by date (most recent first)
+  return filtered.slice().sort((a, b) => {
+    const da = new Date(a['Date']), db = new Date(b['Date']);
+    const va = isNaN(da) ? 0 : da.getTime();
+    const vb = isNaN(db) ? 0 : db.getTime();
+    return vb - va;
   });
 }
 
@@ -1051,26 +1336,28 @@ function renderRecordsTable() {
   const pageRows = filtered.slice(start, start + recordsState.pageSize);
 
   document.getElementById('recordCount').textContent = all.length
-    ? `Showing ${start+1}–${Math.min(start+pageRows.length, filtered.length)} of ${filtered.length} (${all.length} total)`
+    ? `Showing ${start+1}–${Math.min(start+pageRows.length, filtered.length)} of ${filtered.length} (${all.length} total) · sorted newest first`
     : 'No data available — connect your Apps Script URL';
 
   if (!pageRows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:40px">${all.length ? 'No matching records' : 'No records — connect your Apps Script URL to see live data'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:40px">${all.length ? 'No matching records' : 'No records — connect your Apps Script URL to see live data'}</td></tr>`;
     document.getElementById('paginationWrap').innerHTML = '';
     return;
   }
 
   const genderBadge = g => g === 'Male' ? 'badge-cyan' : g === 'Female' ? 'badge-purple' : 'badge-muted';
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '—').toString();
 
   tbody.innerHTML = pageRows.map(r => `
     <tr>
       <td style="white-space:nowrap;font-family:var(--font-mono);font-size:11px">${r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '—'}</td>
-      <td style="max-width:240px">${r['Description of Incident']||'—'}</td>
+      <td style="font-family:var(--font-mono);font-size:11px">${cardNoOf(r)}</td>
+      <td>${r['Name']||'—'}</td>
+      <td style="max-width:220px">${r['Description of Incident']||'—'}</td>
       <td>${r['Nature of Incident']||'—'}</td>
       <td><span class="badge badge-amber">${r['Type of Injury']||'—'}</span></td>
       <td>${r['Affected part']||'—'}</td>
       <td><span class="badge ${genderBadge(r['Gender'])}">${r['Gender']||'—'}</span></td>
-      <td>${r['Name']||'—'}</td>
       <td>${r['Section']||'—'}</td>
       <td>${r['Dept']||'—'}</td>
     </tr>
@@ -1107,6 +1394,83 @@ function renderPagination(totalPages) {
 function goToPage(n) {
   recordsState.page = n;
   renderRecordsTable();
+}
+
+// ── Records Export: Excel ──────────────────────────────────────
+function exportRecordsExcel() {
+  const filtered = getFilteredRecords();
+  if (!filtered.length) { alert('No records to export.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel export library failed to load. Please refresh and try again.'); return; }
+
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '').toString();
+  const data = filtered.map(r => ({
+    'Date': r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '',
+    'Card No': cardNoOf(r),
+    'Name': r['Name'] || '',
+    'Description of Incident': r['Description of Incident'] || '',
+    'Nature of Incident': r['Nature of Incident'] || '',
+    'Type of Injury': r['Type of Injury'] || '',
+    'Affected Part': r['Affected part'] || '',
+    'Gender': r['Gender'] || '',
+    'Section': r['Section'] || '',
+    'Dept': r['Dept'] || ''
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:11},{wch:10},{wch:16},{wch:40},{wch:22},{wch:16},{wch:14},{wch:9},{wch:14},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Incident Register');
+  XLSX.writeFile(wb, `SHE_Incident_Register_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ── Records Export: Print / PDF ─────────────────────────────────
+function printRecordsPdf() {
+  const filtered = getFilteredRecords();
+  if (!filtered.length) { alert('No records to print.'); return; }
+
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '—').toString();
+  const rowsHtml = filtered.map(r => `
+    <tr>
+      <td>${r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '—'}</td>
+      <td>${cardNoOf(r)}</td>
+      <td>${r['Name']||'—'}</td>
+      <td>${r['Description of Incident']||'—'}</td>
+      <td>${r['Nature of Incident']||'—'}</td>
+      <td>${r['Type of Injury']||'—'}</td>
+      <td>${r['Affected part']||'—'}</td>
+      <td>${r['Gender']||'—'}</td>
+      <td>${r['Section']||'—'}</td>
+      <td>${r['Dept']||'—'}</td>
+    </tr>
+  `).join('');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { alert('Please allow popups for this site to use Print / PDF export.'); return; }
+
+  printWindow.document.write(`
+    <!DOCTYPE html><html><head><title>SHE Incident Register</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
+      h1 { font-size: 18px; margin-bottom: 4px; }
+      .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; vertical-align: top; }
+      th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 9px; }
+      tr:nth-child(even) { background: #f8fafc; }
+      @media print { body { padding: 0; } }
+    </style>
+    </head><body>
+      <h1>SHE Incident Register</h1>
+      <div class="sub">Exported ${new Date().toLocaleString()} · ${filtered.length} record(s) · sorted newest first</div>
+      <table>
+        <thead><tr><th>Date</th><th>Card No</th><th>Name</th><th>Description</th><th>Nature</th><th>Injury Type</th><th>Body Part</th><th>Gender</th><th>Section</th><th>Dept</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </body></html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 350);
 }
 
 // ── AI Prediction ────────────────────────────────────────────
@@ -1875,6 +2239,56 @@ function renderExplorerTrend(filtered) {
   const ctx = canvas.getContext('2d');
   if (charts.expTrend) charts.expTrend.destroy();
 
+  const selectedYears = [...explorerState.years].sort();
+
+  if (selectedYears.length > 1) {
+    // Multiple years selected — one line per year, x-axis = month name (Jan–Dec), for easy comparison
+    const byYear = {};
+    filtered.forEach(r => {
+      const d = new Date(r['Date']);
+      if (isNaN(d)) return;
+      const y = d.getFullYear().toString();
+      const m = d.getMonth();
+      if (!byYear[y]) byYear[y] = new Array(12).fill(null);
+      byYear[y][m] = (byYear[y][m] || 0) + 1;
+    });
+
+    const yearsPresent = selectedYears.filter(y => byYear[y]);
+    const datasets = yearsPresent.map((y, i) => ({
+      label: y,
+      data: byYear[y],
+      borderColor: COLORS[i % COLORS.length],
+      backgroundColor: 'transparent',
+      borderWidth: i === yearsPresent.length - 1 ? 3 : 1.5,
+      borderDash: i === yearsPresent.length - 1 ? [] : [4, 3],
+      tension: 0.35,
+      fill: false,
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      spanGaps: true
+    }));
+
+    charts.expTrend = new Chart(ctx, {
+      type: 'line',
+      data: { labels: MONTH_NAMES, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 700 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 16, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } } },
+        scales: {
+          x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
+        }
+      }
+    });
+
+    const sub = document.getElementById('expTrendSub');
+    if (sub) sub.textContent = `Comparing ${yearsPresent.join(', ')} — one line per year`;
+    return;
+  }
+
+  // Single year (or no year filter meaningfully narrows to one) — continuous month-by-month line
   const map = {};
   filtered.forEach(r => {
     const d = new Date(r['Date']);
@@ -1907,8 +2321,8 @@ function renderExplorerTrend(filtered) {
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 16, maxRotation: 0 } },
-        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 16, maxRotation: 0 }, title: axisLabel('Month') },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
       }
     }
   });
