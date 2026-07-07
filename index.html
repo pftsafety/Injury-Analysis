@@ -1321,17 +1321,32 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
         </div>
 
-        <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-card no-clip" style="margin-bottom:16px">
           <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
             <div>
               <div class="card-title">Department-wise monthly trend</div>
-              <div class="card-sub">Incident count per month — top 6 departments</div>
+              <div class="card-sub" id="deptTrendSub">Incident count per month</div>
             </div>
-            <select id="deptTrendMonths" class="year-select" onchange="renderDeptTrendChart()">
-              <option value="12">Last 12 months</option>
-              <option value="24">Last 24 months</option>
-              <option value="36">Last 36 months</option>
-            </select>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="multiselect" id="deptTrendMultiselect">
+                <button class="multiselect-trigger" onclick="toggleDeptTrendMultiselect()">
+                  <span id="deptTrendMultiselectLabel">Top 6 departments</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="multiselect-panel" id="deptTrendMultiselectPanel">
+                  <div class="multiselect-actions">
+                    <span onclick="selectAllDeptTrend()">Select all</span>
+                    <span onclick="clearDeptTrend()">Clear</span>
+                  </div>
+                  <div class="multiselect-options" id="deptTrendOptions"></div>
+                </div>
+              </div>
+              <select id="deptTrendMonths" class="year-select" onchange="renderDeptTrendChart()">
+                <option value="12">Last 12 months</option>
+                <option value="24">Last 24 months</option>
+                <option value="36">Last 36 months</option>
+              </select>
+            </div>
           </div>
           <div class="chart-wrap" style="height:300px">
             <canvas id="deptTrendChart"></canvas>
@@ -1743,14 +1758,25 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
         </div>
 
-        <!-- Department x Gender matrix -->
+        <!-- Time Analysis (scoped to current selection) -->
         <div class="chart-card" style="margin-bottom:16px">
           <div class="card-header">
-            <div class="card-title">Department × Gender matrix</div>
-            <div class="card-sub">Stacked comparison for top departments in selection</div>
+            <div class="card-title">Time analysis</div>
+            <div class="card-sub" id="explorerTimeSub">Hour of day and day of week — within current selection</div>
           </div>
-          <div class="chart-wrap" style="height:280px">
-            <canvas id="explorerMatrixChart"></canvas>
+          <div class="chart-grid grid-2">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted2);margin-bottom:8px">Hour of day</div>
+              <div class="chart-wrap" style="height:220px">
+                <canvas id="explorerHourChart"></canvas>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted2);margin-bottom:8px">Day of week</div>
+              <div class="chart-wrap" style="height:220px">
+                <canvas id="explorerDowChart"></canvas>
+              </div>
+            </div>
           </div>
         </div>
 
