@@ -38,6 +38,107 @@ const GRID = "rgba(15,23,42,0.06)";
 const BORDER = "rgba(15,23,42,0.12)";
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// ── Free-text category cleanup (fixes typos/case/spacing in sheet data) ──
+// Used for Type of Injury, Nature of Incident, and Affected part — free-text
+// fields prone to duplicate categories like "Abrasion" / "abrasion " / "Abrasoin".
+// NOT used for Dept/Section/Gender, which are more likely dropdown-controlled
+// and where fuzzy-merging carries a higher risk of incorrectly combining
+// genuinely distinct values.
+const FUZZY_FIELDS = new Set(['Type of Injury', 'Nature of Incident', 'Affected part']);
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  const al = a.length, bl = b.length;
+  if (al === 0) return bl;
+  if (bl === 0) return al;
+  let prev = new Array(bl + 1);
+  for (let j = 0; j <= bl; j++) prev[j] = j;
+  for (let i = 1; i <= al; i++) {
+    const curr = new Array(bl + 1);
+    curr[0] = i;
+    for (let j = 1; j <= bl; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      curr[j] = Math.min(curr[j-1] + 1, prev[j] + 1, prev[j-1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[bl];
+}
+
+function stringSimilarity(a, b) {
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshtein(a, b) / maxLen;
+}
+
+function normalizeLabel(str) {
+  return (str || '').toString().trim().replace(/\s+/g, ' ');
+}
+
+function toTitleCase(str) {
+  return str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+}
+
+// Merges near-duplicate free-text labels (case/spacing/plural differences + small typos)
+// into a single canonical bucket, keeping the most frequent spelling as the display label.
+function clusterTally(rawTally) {
+  const SIMILARITY_THRESHOLD = 0.80;
+  const MIN_LENGTH_FOR_FUZZY = 4; // avoid false-positive merges between short, coincidentally-similar words
+
+  // Folds simple trailing-"s" plurals into their singular form for grouping purposes
+  // (e.g. "Burns" and "Burn" end up in the same bucket) without touching words
+  // that end in "ss" (e.g. "Bruise" isn't affected).
+  function foldPlural(key) {
+    if (key.length >= 4 && key.endsWith('s') && !key.endsWith('ss')) return key.slice(0, -1);
+    return key;
+  }
+
+  // Step 1 — normalize case/whitespace/plurals, merge duplicates that fold to the same key
+  const buckets = {}; // folded key -> { variants: {spelling: count}, count }
+  Object.entries(rawTally || {}).forEach(([label, count]) => {
+    const clean = normalizeLabel(label);
+    if (!clean) return;
+    const key = foldPlural(clean.toLowerCase());
+    if (!buckets[key]) buckets[key] = { variants: {}, count: 0 };
+    buckets[key].variants[clean] = (buckets[key].variants[clean] || 0) + count;
+    buckets[key].count += count;
+  });
+
+  // Step 2 — pick the most frequent spelling as the canonical display label per bucket
+  const keys = Object.keys(buckets);
+  keys.forEach(key => {
+    const best = Object.entries(buckets[key].variants).sort((a,b) => b[1]-a[1])[0];
+    buckets[key].display = key === 'unknown' ? 'Unknown' : toTitleCase(best[0]);
+  });
+
+  // Step 3 — fuzzy-merge remaining near-duplicate buckets (catches typos), largest bucket wins the name.
+  // "Unknown" is never fuzzy-merged with anything else.
+  const sortedKeys = keys.slice().sort((a,b) => buckets[b].count - buckets[a].count);
+  const used = new Set();
+  const merged = [];
+
+  sortedKeys.forEach(key => {
+    if (used.has(key)) return;
+    used.add(key);
+    let total = buckets[key].count;
+    if (key !== 'unknown' && key.length >= MIN_LENGTH_FOR_FUZZY) {
+      sortedKeys.forEach(otherKey => {
+        if (used.has(otherKey) || otherKey === 'unknown') return;
+        if (otherKey.length < MIN_LENGTH_FOR_FUZZY) return;
+        if (stringSimilarity(key, otherKey) >= SIMILARITY_THRESHOLD) {
+          total += buckets[otherKey].count;
+          used.add(otherKey);
+        }
+      });
+    }
+    merged.push({ display: buckets[key].display, count: total });
+  });
+
+  const result = {};
+  merged.forEach(b => { result[b.display] = (result[b.display] || 0) + b.count; });
+  return result;
+}
+
 let charts = {};
 let appData = {};
 
@@ -90,6 +191,10 @@ async function loadAll() {
     const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary] = await Promise.all([
       api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary')
     ]);
+    // Clean up typo/case-fragmented categories (e.g. "Abrasion" vs "abrasion " vs "Abrasoin")
+    stats.byBodyPart = clusterTally(stats.byBodyPart || {});
+    injury.injuryTypes = clusterTally(injury.injuryTypes || {});
+    injury.natures = clusterTally(injury.natures || {});
     appData = { stats, monthly, injury, raw, repeatIncidents, prevMonthSummary };
     renderAll();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
@@ -184,6 +289,7 @@ function renderAll() {
   renderBodyBars();
   renderSectionBars();
   renderSectionAllChart();
+  initDeptTrendSelector();
   renderDeptTrendChart();
   renderTimeAnalysis();
   renderScorecard();
@@ -789,34 +895,110 @@ function renderSectionAllChart() {
 }
 
 // ── Department-wise monthly trend (Trends view) ────────────────
+// ── Department-wise monthly trend (Trends view) with dept selector ──
+let deptTrendState = { selected: new Set(), available: [], initialized: false };
+
+function initDeptTrendSelector() {
+  const rows = appData.raw?.data || [];
+  const deptTotals = {};
+  rows.forEach(r => {
+    const dept = (r['Dept'] || 'Unknown').toString().trim();
+    deptTotals[dept] = (deptTotals[dept] || 0) + 1;
+  });
+  const sortedDepts = Object.entries(deptTotals).sort((a,b) => b[1] - a[1]).map(([k]) => k);
+  deptTrendState.available = sortedDepts;
+
+  if (!deptTrendState.initialized) {
+    // Default to top 6 by incident count on first load
+    deptTrendState.selected = new Set(sortedDepts.slice(0, 6));
+    deptTrendState.initialized = true;
+  } else {
+    // Keep only selections still present in the (possibly refreshed) dataset
+    deptTrendState.selected = new Set([...deptTrendState.selected].filter(d => sortedDepts.includes(d)));
+  }
+
+  renderDeptTrendOptions();
+  updateDeptTrendLabel();
+}
+
+function renderDeptTrendOptions() {
+  const container = document.getElementById('deptTrendOptions');
+  if (!container) return;
+  container.innerHTML = deptTrendState.available.map(dept => {
+    const checked = deptTrendState.selected.has(dept) ? 'checked' : '';
+    return `
+      <label class="multiselect-option">
+        <input type="checkbox" ${checked} onchange="onDeptTrendChange('${dept.replace(/'/g,"\\'")}', this.checked)">
+        ${dept}
+      </label>
+    `;
+  }).join('');
+}
+
+function onDeptTrendChange(dept, checked) {
+  if (checked) deptTrendState.selected.add(dept);
+  else deptTrendState.selected.delete(dept);
+  updateDeptTrendLabel();
+  renderDeptTrendChart();
+}
+
+function selectAllDeptTrend() {
+  deptTrendState.selected = new Set(deptTrendState.available);
+  renderDeptTrendOptions();
+  updateDeptTrendLabel();
+  renderDeptTrendChart();
+}
+
+function clearDeptTrend() {
+  deptTrendState.selected = new Set();
+  renderDeptTrendOptions();
+  updateDeptTrendLabel();
+  renderDeptTrendChart();
+}
+
+function toggleDeptTrendMultiselect() {
+  const el = document.getElementById('deptTrendMultiselect');
+  const isOpen = el.classList.contains('open');
+  document.querySelectorAll('.multiselect').forEach(m => m.classList.remove('open'));
+  if (!isOpen) el.classList.add('open');
+}
+
+function updateDeptTrendLabel() {
+  const label = document.getElementById('deptTrendMultiselectLabel');
+  if (!label) return;
+  const n = deptTrendState.selected.size;
+  const total = deptTrendState.available.length;
+  if (n === 0) label.textContent = 'No departments selected';
+  else if (n === total) label.textContent = 'All departments';
+  else if (n === 1) label.textContent = [...deptTrendState.selected][0];
+  else label.textContent = `${n} departments selected`;
+}
+
 function renderDeptTrendChart() {
   const canvas = document.getElementById('deptTrendChart');
   if (!canvas) return;
   if (charts.deptTrend) charts.deptTrend.destroy();
 
   const rows = appData.raw?.data || [];
-  if (!rows.length) return; // demo mode / no live data — leave canvas empty, consistent with Time Analysis behavior
+  const sub = document.getElementById('deptTrendSub');
+  if (!rows.length) { if (sub) sub.textContent = 'Connect live data to see this chart'; return; }
+
+  const selectedDepts = [...deptTrendState.selected];
+  if (!selectedDepts.length) { if (sub) sub.textContent = 'No departments selected'; return; }
 
   const monthsBack = parseInt(document.getElementById('deptTrendMonths')?.value || '12', 10);
   const allMonths = (appData.monthly?.monthly || []).map(m => m.month);
   const recentMonths = allMonths.slice(-monthsBack);
 
-  const deptTotals = {};
-  rows.forEach(r => {
-    const dept = (r['Dept'] || 'Unknown').toString().trim();
-    deptTotals[dept] = (deptTotals[dept] || 0) + 1;
-  });
-  const topDepts = Object.entries(deptTotals).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k])=>k);
-
   const deptMonthMap = {};
-  topDepts.forEach(d => deptMonthMap[d] = {});
+  selectedDepts.forEach(d => deptMonthMap[d] = {});
   rows.forEach(r => {
     if (!r['Date']) return;
     const d = new Date(r['Date']);
     if (isNaN(d)) return;
     const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     const dept = (r['Dept'] || 'Unknown').toString().trim();
-    if (!topDepts.includes(dept)) return;
+    if (!selectedDepts.includes(dept)) return;
     deptMonthMap[dept][key] = (deptMonthMap[dept][key] || 0) + 1;
   });
 
@@ -825,7 +1007,7 @@ function renderDeptTrendChart() {
     return `${MONTH_NAMES[+mm-1]} '${y.slice(2)}`;
   });
 
-  const datasets = topDepts.map((dept, i) => ({
+  const datasets = selectedDepts.map((dept, i) => ({
     label: dept,
     data: recentMonths.map(m => deptMonthMap[dept][m] || 0),
     borderColor: COLORS[i % COLORS.length],
@@ -853,6 +1035,8 @@ function renderDeptTrendChart() {
       }
     }
   });
+
+  if (sub) sub.textContent = `${selectedDepts.length} department(s) · last ${monthsBack} months`;
 }
 
 // ── Employee Analysis ────────────────────────────────────────
@@ -877,7 +1061,8 @@ function tallyRows(rows, field) {
     const v = (r[field] || 'Unknown').toString().trim() || 'Unknown';
     map[v] = (map[v] || 0) + 1;
   });
-  return Object.entries(map).sort((a,b) => b[1] - a[1]);
+  const cleaned = FUZZY_FIELDS.has(field) ? clusterTally(map) : map;
+  return Object.entries(cleaned).sort((a,b) => b[1] - a[1]);
 }
 
 function getRowEmployeeKey(r) {
@@ -906,7 +1091,11 @@ function onEmpSearch() {
       const emp = getRowEmployeeKey(r);
       if (!emp.name && !emp.cardNo) return;
       const key = emp.cardNo ? 'card:' + emp.cardNo : 'name:' + emp.name.toLowerCase();
-      if (!map[key]) map[key] = { name: emp.name || 'Unknown', cardNo: emp.cardNo, count: 0 };
+      if (!map[key]) {
+        map[key] = { name: emp.name || 'Unknown', cardNo: emp.cardNo, count: 0 };
+      } else if (map[key].name === 'Unknown' && emp.name) {
+        map[key].name = emp.name; // a later row for the same card no. had the name filled in — use it
+      }
       map[key].count++;
     });
 
@@ -1981,7 +2170,8 @@ function tallyBy(rows, field) {
     const v = (r[field] || 'Unknown').toString().trim() || 'Unknown';
     map[v] = (map[v] || 0) + 1;
   });
-  return Object.entries(map).sort((a,b) => b[1] - a[1]);
+  const cleaned = FUZZY_FIELDS.has(field) ? clusterTally(map) : map;
+  return Object.entries(cleaned).sort((a,b) => b[1] - a[1]);
 }
 
 function initExplorer() {
@@ -2177,11 +2367,11 @@ function applyExplorerFilters() {
   renderExplorerNatureChart(filtered);
   renderExplorerBodyChart(filtered);
   renderExplorerSectionChart(filtered);
-  renderExplorerMatrixChart(filtered);
+  renderExplorerTimeAnalysis(filtered);
 }
 
 function clearExplorerCharts() {
-  ['expTrend','expDept','expGender','expInjury','expNature','expBody','expSection','expMatrix'].forEach(k => {
+  ['expTrend','expDept','expGender','expInjury','expNature','expBody','expSection','expHour','expDow'].forEach(k => {
     if (charts[k]) { charts[k].destroy(); delete charts[k]; }
   });
 }
@@ -2427,43 +2617,64 @@ function renderExplorerSectionChart(filtered) {
   });
 }
 
-function renderExplorerMatrixChart(filtered) {
-  const canvas = document.getElementById('explorerMatrixChart');
-  if (!canvas) return;
-  if (charts.expMatrix) charts.expMatrix.destroy();
+function renderExplorerTimeAnalysis(filtered) {
+  const hourCanvas = document.getElementById('explorerHourChart');
+  const dowCanvas = document.getElementById('explorerDowChart');
+  if (!hourCanvas || !dowCanvas) return;
+  if (charts.expHour) charts.expHour.destroy();
+  if (charts.expDow) charts.expDow.destroy();
 
-  const deptList = tallyBy(filtered, 'Dept').slice(0,8).map(([k]) => k);
-  const maleData = [], femaleData = [], otherData = [];
+  const hourCounts = new Array(24).fill(0);
+  const dowCounts = new Array(7).fill(0);
+  let hasTimeData = false, hasDateData = false;
 
-  deptList.forEach(dept => {
-    let male = 0, female = 0, other = 0;
-    filtered.forEach(r => {
-      if ((r['Dept']||'').toString().trim() !== dept) return;
-      const g = (r['Gender']||'').toString().trim();
-      if (g === 'Male') male++; else if (g === 'Female') female++; else other++;
-    });
-    maleData.push(male); femaleData.push(female); otherData.push(other);
+  filtered.forEach(r => {
+    const hour = parseHour(r['Time']);
+    if (hour !== null) { hourCounts[hour]++; hasTimeData = true; }
+    if (r['Date']) {
+      const d = new Date(r['Date']);
+      if (!isNaN(d)) { dowCounts[d.getDay()]++; hasDateData = true; }
+    }
   });
 
-  const datasets = [
-    { label: 'Male', data: maleData, backgroundColor: '#2563eb', borderRadius: 4 },
-    { label: 'Female', data: femaleData, backgroundColor: '#db2777', borderRadius: 4 }
-  ];
-  if (otherData.some(v => v > 0)) datasets.push({ label: 'Other/Unknown', data: otherData, backgroundColor: '#94a3b8', borderRadius: 4 });
+  const sub = document.getElementById('explorerTimeSub');
+  if (sub) sub.textContent = `Hour of day and day of week — ${filtered.length} incident(s) in current selection`;
 
-  charts.expMatrix = new Chart(canvas.getContext('2d'), {
+  charts.expHour = new Chart(hourCanvas.getContext('2d'), {
     type: 'bar',
-    data: { labels: deptList, datasets },
+    data: {
+      labels: hourCounts.map((_, i) => `${i}:00`),
+      datasets: [{ data: hourCounts, backgroundColor: '#2563eb', borderRadius: 4, maxBarThickness: 14 }]
+    },
     options: {
       responsive: true, maintainAspectRatio: false,
-      animation: { duration: 700 },
-      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, boxHeight: 12, color: '#475569', font: { size: 11 } } } },
+      animation: { duration: 600 },
+      plugins: { legend: { display: false } },
       scales: {
-        x: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, ticks: { maxRotation: 30 } },
-        y: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true }
+        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 12 } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') }
       }
     }
   });
+
+  charts.expDow = new Chart(dowCanvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+      datasets: [{ data: dowCounts, backgroundColor: '#059669', borderRadius: 6, maxBarThickness: 44 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 600 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') }
+      }
+    }
+  });
+
+  if (!hasTimeData && sub) sub.textContent += ' (no Time data recorded for this selection)';
 }
 
 // ── Init ──────────────────────────────────────────────────────
