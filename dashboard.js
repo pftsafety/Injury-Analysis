@@ -148,7 +148,7 @@ function showView(id, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
-  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', prediction:'AI Prediction' };
+  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', prediction:'AI Prediction' };
   document.getElementById('viewTitle').textContent = titles[id] || id;
 }
 
@@ -188,14 +188,14 @@ async function loadAll() {
   }
 
   try {
-    const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary] = await Promise.all([
-      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary')
+    const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred] = await Promise.all([
+      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary'), api('hospital_referred')
     ]);
     // Clean up typo/case-fragmented categories (e.g. "Abrasion" vs "abrasion " vs "Abrasoin")
     stats.byBodyPart = clusterTally(stats.byBodyPart || {});
     injury.injuryTypes = clusterTally(injury.injuryTypes || {});
     injury.natures = clusterTally(injury.natures || {});
-    appData = { stats, monthly, injury, raw, repeatIncidents, prevMonthSummary };
+    appData = { stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred };
     renderAll();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
     loadPrediction();
@@ -254,16 +254,27 @@ function loadDemoData() {
       totalRepeatEmployees: 6,
       periodLabel: "Since Mar 2023",
       employees: [
-        { name: "Sabarinath", cardNo: "700880", totalIncidents: 4, firstIncidentDate: "12 Jan 2024", lastIncidentDate: "15 Feb 2024", spanDays: 34, primaryDept: "Engineering", primaryInjuryType: "Abrasion" },
-        { name: "Vijayan", cardNo: "108", totalIncidents: 3, firstIncidentDate: "03 Mar 2023", lastIncidentDate: "27 Feb 2024", spanDays: 361, primaryDept: "Packing", primaryInjuryType: "Abrasion" },
-        { name: "Kiran", cardNo: "102347", totalIncidents: 2, firstIncidentDate: "19 Aug 2023", lastIncidentDate: "27 Feb 2024", spanDays: 192, primaryDept: "Engineering", primaryInjuryType: "Foreign Body" },
-        { name: "Rahul R P", cardNo: "507089", totalIncidents: 2, firstIncidentDate: "22 Sep 2023", lastIncidentDate: "15 Feb 2024", spanDays: 146, primaryDept: "Primary Production", primaryInjuryType: "Trauma" }
+        { name: "Sabarinath", cardNo: "700880", totalIncidents: 4, firstIncidentDate: "12 Jan 2024", lastIncidentDate: "15 Feb 2024", spanDays: 34, primaryDept: "Engineering", primaryInjuryType: "Abrasion", primaryBodyPart: "Right Hand" },
+        { name: "Vijayan", cardNo: "108", totalIncidents: 3, firstIncidentDate: "03 Mar 2023", lastIncidentDate: "27 Feb 2024", spanDays: 361, primaryDept: "Packing", primaryInjuryType: "Abrasion", primaryBodyPart: "Left Hand" },
+        { name: "Kiran", cardNo: "102347", totalIncidents: 2, firstIncidentDate: "19 Aug 2023", lastIncidentDate: "27 Feb 2024", spanDays: 192, primaryDept: "Engineering", primaryInjuryType: "Foreign Body", primaryBodyPart: "Right Eye" },
+        { name: "Rahul R P", cardNo: "507089", totalIncidents: 2, firstIncidentDate: "22 Sep 2023", lastIncidentDate: "15 Feb 2024", spanDays: 146, primaryDept: "Primary Production", primaryInjuryType: "Trauma", primaryBodyPart: "Right Foot" }
       ]
     },
     prevMonthSummary: {
       repeatIncidentsThisMonth: [
         { name: "Sabarinath", cardNo: "700880", count: 2 }
       ]
+    },
+    hospitalReferred: {
+      total: 18,
+      totalAllIncidents: total,
+      percentOfAll: Math.round((18/total)*1000)/10,
+      byDept: [['Primary Production', 7], ['Packing', 5], ['Engineering', 4], ['ETD', 2]],
+      byInjuryType: [['Trauma', 6], ['Fracture', 4], ['Foreign Body', 4], ['Burn', 3], ['Laceration', 1]],
+      byBodyPart: [['Right Hand', 5], ['Right Eye', 4], ['Left Foot', 3], ['Head', 3], ['Right Foot', 2], ['Left Hand', 1]],
+      byGender: [['Male', 13], ['Female', 5]],
+      monthly: monthly.slice(-12).map(m => ({ month: m.month, count: Math.max(0, Math.round(m.count * 0.08)) })),
+      cases: []
     }
   };
   renderAll();
@@ -300,6 +311,8 @@ function renderAll() {
   initRecordsTable();
   initExplorer();
   initEmployeeSearch();
+  renderWatchlistView();
+  renderHospitalView();
 }
 
 // ── KPIs ─────────────────────────────────────────────────────
@@ -1246,6 +1259,640 @@ function renderEmployeeProfile(name, cardNo) {
   `).join('');
 }
 
+// ── Repeat-Incident Watchlist (dedicated tab) ────────────────────
+let watchlistState = { page: 1, pageSize: 25, search: '', dept: '', sortBy: 'count-desc' };
+
+function renderWatchlistView() {
+  const data = appData.repeatIncidents || { totalRepeatEmployees: 0, employees: [], periodLabel: '' };
+  const employees = data.employees || [];
+
+  const badge = document.getElementById('watchlistBadge');
+  if (badge) {
+    if (data.totalRepeatEmployees > 0) {
+      badge.style.display = 'inline-flex';
+      badge.textContent = data.totalRepeatEmployees;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  const periodLabelEl = document.getElementById('wlPeriodLabel');
+  if (periodLabelEl) periodLabelEl.textContent = `Employees with 2 or more incidents${data.periodLabel ? ' · ' + data.periodLabel : ''}`;
+
+  const emptyState = document.getElementById('wlEmptyState');
+
+  if (!employees.length) {
+    if (emptyState) emptyState.style.display = 'block';
+    setWatchlistKpisEmpty();
+    clearWatchlistCharts();
+    const tbody = document.getElementById('wlTableBody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">No repeat-incident employees${appData.raw?.data?.length ? ' found' : ' — connect your Apps Script URL'}</td></tr>`;
+    const pag = document.getElementById('wlPaginationWrap');
+    if (pag) pag.innerHTML = '';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  renderWatchlistKpis(data, employees);
+  renderWatchlistTopChart(employees);
+  renderWatchlistDeptChart(employees);
+  renderWatchlistInjuryChart(employees);
+  renderWatchlistBodyChart(employees);
+  renderWatchlistFreqChart(employees);
+  populateWatchlistDeptFilter(employees);
+  renderWatchlistTable();
+}
+
+function renderWatchlistKpis(data, employees) {
+  const container = document.getElementById('wlKpiRow');
+  if (!container) return;
+  const totalIncidentsAmongRepeat = employees.reduce((s,e) => s + (e.totalIncidents||0), 0);
+  const avgIncidents = employees.length ? (totalIncidentsAmongRepeat / employees.length).toFixed(1) : '0';
+  const maxEmp = employees.slice().sort((a,b) => b.totalIncidents - a.totalIncidents)[0];
+
+  container.innerHTML = `
+    <div class="kpi-card c-red">
+      <div class="kpi-icon c-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg></div>
+      <div class="kpi-label">Repeat-Incident Employees</div>
+      <div class="kpi-value"><span class="counter">${data.totalRepeatEmployees}</span></div>
+      <div class="kpi-sub">${data.periodLabel || ''}</div>
+    </div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div class="kpi-label">Total Incidents (Group)</div>
+      <div class="kpi-value"><span class="counter">${totalIncidentsAmongRepeat}</span></div>
+      <div class="kpi-sub">Among repeat-incident employees</div>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="kpi-label">Avg Incidents / Employee</div>
+      <div class="kpi-value">${avgIncidents}</div>
+      <div class="kpi-sub">Within this group</div>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+      <div class="kpi-label">Highest Single Employee</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${maxEmp ? maxEmp.name : '—'}</div>
+      <div class="kpi-sub">${maxEmp ? maxEmp.totalIncidents + ' incidents' : ''}</div>
+    </div>
+  `;
+  container.querySelectorAll('.counter').forEach(el => animateCounter(el, parseInt(el.textContent) || 0));
+}
+
+function setWatchlistKpisEmpty() {
+  const container = document.getElementById('wlKpiRow');
+  if (container) container.innerHTML = '';
+}
+
+function clearWatchlistCharts() {
+  ['wlTop','wlDept','wlInjury','wlBody','wlFreq'].forEach(k => {
+    if (charts[k]) { charts[k].destroy(); delete charts[k]; }
+  });
+}
+
+function renderWatchlistTopChart(employees) {
+  const canvas = document.getElementById('wlTopChart');
+  if (!canvas) return;
+  if (charts.wlTop) charts.wlTop.destroy();
+  const top = employees.slice().sort((a,b) => b.totalIncidents - a.totalIncidents).slice(0, 15);
+  charts.wlTop = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: {
+      labels: top.map(e => e.name + (e.cardNo ? ` (${e.cardNo})` : '')),
+      datasets: [{ data: top.map(e => e.totalIncidents), backgroundColor: '#dc2626', borderRadius: 5 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') },
+        y: { grid: { display: false }, border: { color: BORDER } }
+      }
+    }
+  });
+}
+
+function renderWatchlistDeptChart(employees) {
+  const canvas = document.getElementById('wlDeptChart');
+  if (!canvas) return;
+  if (charts.wlDept) charts.wlDept.destroy();
+  const tally = tallyRows(employees, 'primaryDept');
+  charts.wlDept = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+}
+
+function renderWatchlistInjuryChart(employees) {
+  const canvas = document.getElementById('wlInjuryChart');
+  if (!canvas) return;
+  if (charts.wlInjury) charts.wlInjury.destroy();
+  const tally = tallyRows(employees, 'primaryInjuryType').slice(0, 8);
+  charts.wlInjury = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+}
+
+function renderWatchlistBodyChart(employees) {
+  const canvas = document.getElementById('wlBodyChart');
+  if (!canvas) return;
+  if (charts.wlBody) charts.wlBody.destroy();
+  const tally = tallyRows(employees, 'primaryBodyPart').slice(0, 8);
+  charts.wlBody = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: '#7c3aed', borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Employees') },
+        y: { grid: { display: false }, border: { color: BORDER } }
+      }
+    }
+  });
+}
+
+function renderWatchlistFreqChart(employees) {
+  const canvas = document.getElementById('wlFreqChart');
+  if (!canvas) return;
+  if (charts.wlFreq) charts.wlFreq.destroy();
+
+  const buckets = { '2': 0, '3': 0, '4': 0, '5+': 0 };
+  employees.forEach(e => {
+    if (e.totalIncidents === 2) buckets['2']++;
+    else if (e.totalIncidents === 3) buckets['3']++;
+    else if (e.totalIncidents === 4) buckets['4']++;
+    else buckets['5+']++;
+  });
+
+  charts.wlFreq = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['2 incidents', '3 incidents', '4 incidents', '5+ incidents'],
+      datasets: [{ data: Object.values(buckets), backgroundColor: ['#f59e0b','#f97316','#ef4444','#991b1b'], borderRadius: 6, maxBarThickness: 60 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Employees') }
+      }
+    }
+  });
+}
+
+function populateWatchlistDeptFilter(employees) {
+  const sel = document.getElementById('wlDeptFilter');
+  if (!sel) return;
+  const depts = [...new Set(employees.map(e => e.primaryDept).filter(Boolean))].sort();
+  const current = watchlistState.dept;
+  sel.innerHTML = `<option value="">All departments</option>` + depts.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel.value = depts.includes(current) ? current : '';
+}
+
+function onWatchlistSearch() {
+  watchlistState.search = document.getElementById('wlSearch').value.trim().toLowerCase();
+  watchlistState.dept = document.getElementById('wlDeptFilter').value;
+  watchlistState.sortBy = document.getElementById('wlSortBy').value;
+  watchlistState.page = 1;
+  renderWatchlistTable();
+}
+
+function getFilteredWatchlist() {
+  const employees = (appData.repeatIncidents?.employees || []).slice();
+  const filtered = employees.filter(e => {
+    if (watchlistState.dept && e.primaryDept !== watchlistState.dept) return false;
+    if (watchlistState.search) {
+      const haystack = [e.name, e.cardNo].join(' ').toLowerCase();
+      if (!haystack.includes(watchlistState.search)) return false;
+    }
+    return true;
+  });
+
+  switch (watchlistState.sortBy) {
+    case 'count-asc': filtered.sort((a,b) => a.totalIncidents - b.totalIncidents); break;
+    case 'name-asc': filtered.sort((a,b) => (a.name||'').localeCompare(b.name||'')); break;
+    case 'recent-desc': filtered.sort((a,b) => new Date(b.lastIncidentDate||0) - new Date(a.lastIncidentDate||0)); break;
+    default: filtered.sort((a,b) => b.totalIncidents - a.totalIncidents); // count-desc
+  }
+  return filtered;
+}
+
+function renderWatchlistTable() {
+  const tbody = document.getElementById('wlTableBody');
+  if (!tbody) return;
+  const all = appData.repeatIncidents?.employees || [];
+  const filtered = getFilteredWatchlist();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / watchlistState.pageSize));
+  watchlistState.page = Math.min(watchlistState.page, totalPages);
+
+  const start = (watchlistState.page - 1) * watchlistState.pageSize;
+  const pageRows = filtered.slice(start, start + watchlistState.pageSize);
+
+  const sub = document.getElementById('wlTableSub');
+  if (sub) sub.textContent = all.length
+    ? `Showing ${start+1}–${Math.min(start+pageRows.length, filtered.length)} of ${filtered.length} (${all.length} total repeat-incident employees)`
+    : 'No data available';
+
+  if (!pageRows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:40px">${all.length ? 'No matching employees' : 'No repeat-incident employees found'}</td></tr>`;
+    const pag = document.getElementById('wlPaginationWrap');
+    if (pag) pag.innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = pageRows.map(e => {
+    const safeName = (e.name||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const safeCard = (e.cardNo||'').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    return `
+    <tr>
+      <td style="font-weight:600">${e.name || '—'}</td>
+      <td style="font-family:var(--font-mono);font-size:11px">${e.cardNo || '—'}</td>
+      <td><span class="badge badge-red">${e.totalIncidents}</span></td>
+      <td>${e.primaryDept || '—'}</td>
+      <td><span class="badge badge-amber">${e.primaryInjuryType || '—'}</span></td>
+      <td>${e.primaryBodyPart || '—'}</td>
+      <td style="font-size:11px;white-space:nowrap">${e.firstIncidentDate || '—'}</td>
+      <td style="font-size:11px;white-space:nowrap">${e.lastIncidentDate || '—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${e.spanDays != null ? e.spanDays + 'd' : '—'}</td>
+      <td><button class="btn-export" onclick="viewEmployeeFromWatchlist('${safeName}', '${safeCard}')">View</button></td>
+    </tr>
+  `;
+  }).join('');
+
+  renderWatchlistPagination(totalPages);
+}
+
+function renderWatchlistPagination(totalPages) {
+  const wrap = document.getElementById('wlPaginationWrap');
+  if (!wrap) return;
+  if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+  const p = watchlistState.page;
+
+  let pageBtns = '';
+  const pageList = new Set([1, totalPages, p, p-1, p+1].filter(n => n >= 1 && n <= totalPages));
+  const sortedPages = [...pageList].sort((a,b)=>a-b);
+  let lastShown = 0;
+  sortedPages.forEach(n => {
+    if (n - lastShown > 1) pageBtns += `<span style="color:var(--muted);padding:0 4px">…</span>`;
+    pageBtns += `<button class="page-btn ${n===p?'active':''}" onclick="goToWatchlistPage(${n})">${n}</button>`;
+    lastShown = n;
+  });
+
+  wrap.innerHTML = `
+    <div class="page-info">Page ${p} of ${totalPages}</div>
+    <div class="page-controls">
+      <button class="page-btn" onclick="goToWatchlistPage(${p-1})" ${p<=1?'disabled':''}>‹ Prev</button>
+      ${pageBtns}
+      <button class="page-btn" onclick="goToWatchlistPage(${p+1})" ${p>=totalPages?'disabled':''}>Next ›</button>
+    </div>
+  `;
+}
+
+function goToWatchlistPage(n) {
+  watchlistState.page = n;
+  renderWatchlistTable();
+}
+
+function viewEmployeeFromWatchlist(name, cardNo) {
+  showView('employee', document.getElementById('navEmployeeBtn'));
+  const searchInput = document.getElementById('empSearch');
+  if (searchInput) searchInput.value = name;
+  renderEmployeeProfile(name, cardNo);
+}
+
+// ── Hospital Reference (dedicated tab) ────────────────────────
+let hospitalTableState = { page: 1, pageSize: 25, search: '', dept: '' };
+
+function renderHospitalView() {
+  const data = appData.hospitalReferred || { total: 0, totalAllIncidents: 0, percentOfAll: 0, cases: [], monthly: [], byDept: [], byInjuryType: [], byBodyPart: [], byGender: [] };
+  const cases = data.cases || [];
+
+  const badge = document.getElementById('hospitalBadge');
+  if (badge) {
+    if (data.total > 0) {
+      badge.style.display = 'inline-flex';
+      badge.textContent = data.total;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  const periodLabelEl = document.getElementById('hospPeriodLabel');
+  if (periodLabelEl) periodLabelEl.textContent = data.totalAllIncidents
+    ? `Cases with a colored (highlighted) row in the sheet, marking hospital referral — ${data.percentOfAll}% of all incidents`
+    : 'Cases marked as hospital-referred in the incident register';
+
+  const emptyState = document.getElementById('hospEmptyState');
+  const emptyNote = document.getElementById('hospEmptyNote');
+
+  if (!cases.length) {
+    if (emptyState) emptyState.style.display = 'block';
+    if (emptyNote) emptyNote.textContent = appData.raw?.data?.length
+      ? 'No highlighted rows detected — check that hospital-referred cases have a colored cell background in the sheet'
+      : 'Connect your Apps Script URL to see this data';
+    setHospitalKpisEmpty();
+    clearHospitalCharts();
+    const tbody = document.getElementById('hospTableBody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">No hospital-referred cases found</td></tr>`;
+    const pag = document.getElementById('hospPaginationWrap');
+    if (pag) pag.innerHTML = '';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  renderHospitalKpis(data);
+  renderHospitalTrendChart(data);
+  renderHospitalDeptChart(data);
+  renderHospitalInjuryChart(data);
+  renderHospitalBodyChart(data);
+  renderHospitalGenderChart(data);
+  populateHospitalDeptFilter(data);
+  renderHospitalTable();
+}
+
+function renderHospitalKpis(data) {
+  const container = document.getElementById('hospKpiRow');
+  if (!container) return;
+  const topDept = (data.byDept || [])[0];
+  const topInjury = (data.byInjuryType || [])[0];
+
+  container.innerHTML = `
+    <div class="kpi-card c-red">
+      <div class="kpi-icon c-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+      <div class="kpi-label">Hospital-Referred Cases</div>
+      <div class="kpi-value"><span class="counter">${data.total}</span></div>
+      <div class="kpi-sub">Total on record</div>
+    </div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div class="kpi-label">Share of All Incidents</div>
+      <div class="kpi-value">${data.percentOfAll}%</div>
+      <div class="kpi-sub">${data.total} of ${data.totalAllIncidents} incidents</div>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="kpi-label">Top Department</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${topDept ? topDept[0] : '—'}</div>
+      <div class="kpi-sub">${topDept ? topDept[1] + ' cases' : ''}</div>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div class="kpi-label">Top Injury Type</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${topInjury ? topInjury[0] : '—'}</div>
+      <div class="kpi-sub">${topInjury ? topInjury[1] + ' cases' : ''}</div>
+    </div>
+  `;
+  container.querySelectorAll('.counter').forEach(el => animateCounter(el, parseInt(el.textContent) || 0));
+}
+
+function setHospitalKpisEmpty() {
+  const container = document.getElementById('hospKpiRow');
+  if (container) container.innerHTML = '';
+}
+
+function clearHospitalCharts() {
+  ['hospTrend','hospDept','hospInjury','hospBody','hospGender'].forEach(k => {
+    if (charts[k]) { charts[k].destroy(); delete charts[k]; }
+  });
+}
+
+function renderHospitalTrendChart(data) {
+  const canvas = document.getElementById('hospTrendChart');
+  if (!canvas) return;
+  if (charts.hospTrend) charts.hospTrend.destroy();
+  const monthly = data.monthly || [];
+  const labels = monthly.map(m => { const [y,mm] = m.month.split('-'); return `${MONTH_NAMES[+mm-1]} '${y.slice(2)}`; });
+
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0,0,0,200);
+  gradient.addColorStop(0, 'rgba(220,38,38,0.16)');
+  gradient.addColorStop(1, 'rgba(220,38,38,0)');
+
+  charts.hospTrend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: monthly.map(m => m.count),
+        borderColor: '#dc2626', backgroundColor: gradient,
+        borderWidth: 2.5, tension: 0.4, fill: true,
+        pointRadius: monthly.length > 24 ? 0 : 3,
+        pointBackgroundColor: '#dc2626', pointBorderColor: '#fff', pointBorderWidth: 2,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 16, maxRotation: 0 }, title: axisLabel('Month') },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Cases') }
+      }
+    }
+  });
+}
+
+function renderHospitalDeptChart(data) {
+  const canvas = document.getElementById('hospDeptChart');
+  if (!canvas) return;
+  if (charts.hospDept) charts.hospDept.destroy();
+  const tally = (data.byDept || []).slice(0, 8);
+  charts.hospDept = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+}
+
+function renderHospitalInjuryChart(data) {
+  const canvas = document.getElementById('hospInjuryChart');
+  if (!canvas) return;
+  if (charts.hospInjury) charts.hospInjury.destroy();
+  const tally = (data.byInjuryType || []).slice(0, 8);
+  charts.hospInjury = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+}
+
+function renderHospitalBodyChart(data) {
+  const canvas = document.getElementById('hospBodyChart');
+  if (!canvas) return;
+  if (charts.hospBody) charts.hospBody.destroy();
+  const tally = (data.byBodyPart || []).slice(0, 8);
+  charts.hospBody = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: '#dc2626', borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Cases') },
+        y: { grid: { display: false }, border: { color: BORDER } }
+      }
+    }
+  });
+}
+
+function renderHospitalGenderChart(data) {
+  const canvas = document.getElementById('hospGenderChart');
+  if (!canvas) return;
+  if (charts.hospGender) charts.hospGender.destroy();
+  const tally = data.byGender || [];
+  charts.hospGender = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: ['#2563eb','#db2777','#94a3b8','#7c3aed'], borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '64%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 8, padding: 12, color: '#475569' } } }
+    }
+  });
+}
+
+function populateHospitalDeptFilter(data) {
+  const sel = document.getElementById('hospDeptFilter');
+  if (!sel) return;
+  const depts = (data.byDept || []).map(([k]) => k).sort();
+  const current = hospitalTableState.dept;
+  sel.innerHTML = `<option value="">All departments</option>` + depts.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel.value = depts.includes(current) ? current : '';
+}
+
+function onHospitalSearch() {
+  hospitalTableState.search = document.getElementById('hospSearch').value.trim().toLowerCase();
+  hospitalTableState.dept = document.getElementById('hospDeptFilter').value;
+  hospitalTableState.page = 1;
+  renderHospitalTable();
+}
+
+function getFilteredHospitalCases() {
+  const cases = (appData.hospitalReferred?.cases || []).slice();
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '').toString();
+
+  const filtered = cases.filter(r => {
+    if (hospitalTableState.dept && (r['Dept']||'').toString().trim() !== hospitalTableState.dept) return false;
+    if (hospitalTableState.search) {
+      const haystack = [r['Name'], cardNoOf(r), r['Description of Incident'], r['Dept'], r['Section']].join(' ').toLowerCase();
+      if (!haystack.includes(hospitalTableState.search)) return false;
+    }
+    return true;
+  });
+
+  // Sort newest first, same convention as Records
+  return filtered.sort((a, b) => {
+    const da = new Date(a['Date']), db = new Date(b['Date']);
+    const va = isNaN(da) ? 0 : da.getTime();
+    const vb = isNaN(db) ? 0 : db.getTime();
+    return vb - va;
+  });
+}
+
+function renderHospitalTable() {
+  const tbody = document.getElementById('hospTableBody');
+  if (!tbody) return;
+  const all = appData.hospitalReferred?.cases || [];
+  const filtered = getFilteredHospitalCases();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / hospitalTableState.pageSize));
+  hospitalTableState.page = Math.min(hospitalTableState.page, totalPages);
+
+  const start = (hospitalTableState.page - 1) * hospitalTableState.pageSize;
+  const pageRows = filtered.slice(start, start + hospitalTableState.pageSize);
+
+  const sub = document.getElementById('hospTableSub');
+  if (sub) sub.textContent = all.length
+    ? `Showing ${start+1}–${Math.min(start+pageRows.length, filtered.length)} of ${filtered.length} (${all.length} total) · sorted newest first`
+    : 'No data available';
+
+  if (!pageRows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:40px">${all.length ? 'No matching cases' : 'No hospital-referred cases found'}</td></tr>`;
+    const pag = document.getElementById('hospPaginationWrap');
+    if (pag) pag.innerHTML = '';
+    return;
+  }
+
+  const genderBadge = g => g === 'Male' ? 'badge-cyan' : g === 'Female' ? 'badge-purple' : 'badge-muted';
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '—').toString();
+
+  tbody.innerHTML = pageRows.map(r => `
+    <tr>
+      <td style="white-space:nowrap;font-family:var(--font-mono);font-size:11px">${r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '—'}</td>
+      <td style="font-family:var(--font-mono);font-size:11px">${cardNoOf(r)}</td>
+      <td>${r['Name']||'—'}</td>
+      <td style="max-width:220px">${r['Description of Incident']||'—'}</td>
+      <td>${r['Nature of Incident']||'—'}</td>
+      <td><span class="badge badge-red">${r['Type of Injury']||'—'}</span></td>
+      <td>${r['Affected part']||'—'}</td>
+      <td><span class="badge ${genderBadge(r['Gender'])}">${r['Gender']||'—'}</span></td>
+      <td>${r['Section']||'—'}</td>
+      <td>${r['Dept']||'—'}</td>
+    </tr>
+  `).join('');
+
+  renderHospitalPagination(totalPages);
+}
+
+function renderHospitalPagination(totalPages) {
+  const wrap = document.getElementById('hospPaginationWrap');
+  if (!wrap) return;
+  if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+  const p = hospitalTableState.page;
+
+  let pageBtns = '';
+  const pageList = new Set([1, totalPages, p, p-1, p+1].filter(n => n >= 1 && n <= totalPages));
+  const sortedPages = [...pageList].sort((a,b)=>a-b);
+  let lastShown = 0;
+  sortedPages.forEach(n => {
+    if (n - lastShown > 1) pageBtns += `<span style="color:var(--muted);padding:0 4px">…</span>`;
+    pageBtns += `<button class="page-btn ${n===p?'active':''}" onclick="goToHospitalPage(${n})">${n}</button>`;
+    lastShown = n;
+  });
+
+  wrap.innerHTML = `
+    <div class="page-info">Page ${p} of ${totalPages}</div>
+    <div class="page-controls">
+      <button class="page-btn" onclick="goToHospitalPage(${p-1})" ${p<=1?'disabled':''}>‹ Prev</button>
+      ${pageBtns}
+      <button class="page-btn" onclick="goToHospitalPage(${p+1})" ${p>=totalPages?'disabled':''}>Next ›</button>
+    </div>
+  `;
+}
+
+function goToHospitalPage(n) {
+  hospitalTableState.page = n;
+  renderHospitalTable();
+}
+
 // ── Time Analysis ────────────────────────────────────────────
 function parseHour(timeVal) {
   if (!timeVal) return null;
@@ -2164,6 +2811,11 @@ let explorerState = { years: new Set(), months: new Set(), dept: '' };
 let explorerYearsAvailable = [];
 const explorerMonthsAvailable = [1,2,3,4,5,6,7,8,9,10,11,12];
 
+// Custom date-range mode (for ranges that cross a year boundary, e.g. Apr 2025 → Mar 2026)
+let explorerRangeMode = false;
+let explorerRangeFrom = null; // { year, month }
+let explorerRangeTo = null;   // { year, month }
+
 function tallyBy(rows, field) {
   const map = {};
   rows.forEach(r => {
@@ -2172,6 +2824,66 @@ function tallyBy(rows, field) {
   });
   const cleaned = FUZZY_FIELDS.has(field) ? clusterTally(map) : map;
   return Object.entries(cleaned).sort((a,b) => b[1] - a[1]);
+}
+
+function populateExplorerRangeOptions() {
+  const fromSel = document.getElementById('explorerRangeFrom');
+  const toSel = document.getElementById('explorerRangeTo');
+  if (!fromSel || !toSel) return;
+
+  const months = (appData.monthly?.monthly || []).map(m => m.month); // ['2023-01', ...] ascending
+  const optionsHtml = '<option value="">—</option>' + months.map(m => {
+    const [y, mm] = m.split('-');
+    return `<option value="${m}">${MONTH_NAMES[+mm-1]} ${y}</option>`;
+  }).join('');
+
+  const prevFrom = fromSel.value, prevTo = toSel.value;
+  fromSel.innerHTML = optionsHtml;
+  toSel.innerHTML = optionsHtml;
+  // Preserve selection across data refreshes if the same month keys still exist
+  if (months.includes(prevFrom)) fromSel.value = prevFrom;
+  if (months.includes(prevTo)) toSel.value = prevTo;
+}
+
+function onExplorerRangeChange() {
+  const fromVal = document.getElementById('explorerRangeFrom').value;
+  const toVal = document.getElementById('explorerRangeTo').value;
+
+  if (!fromVal || !toVal) {
+    explorerRangeMode = false;
+    explorerRangeFrom = null;
+    explorerRangeTo = null;
+    updateExplorerChips();
+    applyExplorerFilters();
+    return;
+  }
+
+  const [fy, fm] = fromVal.split('-').map(Number);
+  const [ty, tm] = toVal.split('-').map(Number);
+
+  // Auto-swap if From is after To, so the range is always valid regardless of pick order
+  if (fy * 12 + fm > ty * 12 + tm) {
+    document.getElementById('explorerRangeFrom').value = toVal;
+    document.getElementById('explorerRangeTo').value = fromVal;
+    onExplorerRangeChange();
+    return;
+  }
+
+  explorerRangeMode = true;
+  explorerRangeFrom = { year: fy, month: fm };
+  explorerRangeTo = { year: ty, month: tm };
+  updateExplorerChips();
+  applyExplorerFilters();
+}
+
+function clearExplorerRange() {
+  document.getElementById('explorerRangeFrom').value = '';
+  document.getElementById('explorerRangeTo').value = '';
+  explorerRangeMode = false;
+  explorerRangeFrom = null;
+  explorerRangeTo = null;
+  updateExplorerChips();
+  applyExplorerFilters();
 }
 
 function initExplorer() {
@@ -2193,6 +2905,7 @@ function initExplorer() {
   renderMultiselectOptions('year', explorerYearsAvailable, explorerState.years, y => y);
   renderMultiselectOptions('month', explorerMonthsAvailable, explorerState.months, m => MONTH_NAMES[m-1]);
   populateExplorerDeptFilter();
+  populateExplorerRangeOptions();
   updateMultiselectLabels();
   updateExplorerChips();
   applyExplorerFilters();
@@ -2277,13 +2990,19 @@ function updateExplorerChips() {
   const container = document.getElementById('explorerActiveChips');
   if (!container) return;
   const chips = [];
-  const ys = explorerState.years, ms = explorerState.months;
 
-  if (ys.size !== explorerYearsAvailable.length) {
-    chips.push(`Years: ${ys.size ? [...ys].sort().join(', ') : 'none'}`);
-  }
-  if (ms.size !== explorerMonthsAvailable.length) {
-    chips.push(`Months: ${ms.size ? [...ms].sort((a,b)=>a-b).map(m=>MONTH_NAMES[m-1]).join(', ') : 'none'}`);
+  if (explorerRangeMode && explorerRangeFrom && explorerRangeTo) {
+    const fromLabel = `${MONTH_NAMES[explorerRangeFrom.month-1]} ${explorerRangeFrom.year}`;
+    const toLabel = `${MONTH_NAMES[explorerRangeTo.month-1]} ${explorerRangeTo.year}`;
+    chips.push(`Range: ${fromLabel} → ${toLabel}`);
+  } else {
+    const ys = explorerState.years, ms = explorerState.months;
+    if (ys.size !== explorerYearsAvailable.length) {
+      chips.push(`Years: ${ys.size ? [...ys].sort().join(', ') : 'none'}`);
+    }
+    if (ms.size !== explorerMonthsAvailable.length) {
+      chips.push(`Months: ${ms.size ? [...ms].sort((a,b)=>a-b).map(m=>MONTH_NAMES[m-1]).join(', ') : 'none'}`);
+    }
   }
   if (explorerState.dept) chips.push(`Dept: ${explorerState.dept}`);
 
@@ -2306,8 +3025,15 @@ function resetExplorerFilters() {
   explorerState.years = new Set(explorerYearsAvailable);
   explorerState.months = new Set(explorerMonthsAvailable);
   explorerState.dept = '';
+  explorerRangeMode = false;
+  explorerRangeFrom = null;
+  explorerRangeTo = null;
   const deptSel = document.getElementById('explorerDeptFilter');
   if (deptSel) deptSel.value = '';
+  const fromSel = document.getElementById('explorerRangeFrom');
+  const toSel = document.getElementById('explorerRangeTo');
+  if (fromSel) fromSel.value = '';
+  if (toSel) toSel.value = '';
   renderMultiselectOptions('year', explorerYearsAvailable, explorerState.years, y => y);
   renderMultiselectOptions('month', explorerMonthsAvailable, explorerState.months, m => MONTH_NAMES[m-1]);
   updateMultiselectLabels();
@@ -2335,14 +3061,24 @@ function applyExplorerFilters() {
     return;
   }
 
+  const rangeFromKey = (explorerRangeMode && explorerRangeFrom) ? explorerRangeFrom.year * 12 + explorerRangeFrom.month : null;
+  const rangeToKey = (explorerRangeMode && explorerRangeTo) ? explorerRangeTo.year * 12 + explorerRangeTo.month : null;
+
   const filtered = allRows.filter(r => {
     if (!r['Date']) return false;
     const d = new Date(r['Date']);
     if (isNaN(d)) return false;
     const y = d.getFullYear().toString();
     const m = d.getMonth() + 1;
-    if (!explorerState.years.has(y)) return false;
-    if (!explorerState.months.has(m)) return false;
+
+    if (explorerRangeMode && rangeFromKey !== null && rangeToKey !== null) {
+      const key = d.getFullYear() * 12 + m;
+      if (key < rangeFromKey || key > rangeToKey) return false;
+    } else {
+      if (!explorerState.years.has(y)) return false;
+      if (!explorerState.months.has(m)) return false;
+    }
+
     if (explorerState.dept && (r['Dept']||'').toString().trim() !== explorerState.dept) return false;
     return true;
   });
@@ -2351,7 +3087,7 @@ function applyExplorerFilters() {
     if (emptyState) {
       emptyState.style.display = 'block';
       if (emptyDivs[0]) emptyDivs[0].textContent = 'No records match this selection';
-      if (emptyDivs[1]) emptyDivs[1].textContent = 'Try selecting different years, months, or clear the department filter';
+      if (emptyDivs[1]) emptyDivs[1].textContent = explorerRangeMode ? 'Try a different date range, or clear the department filter' : 'Try selecting different years, months, or clear the department filter';
     }
     clearExplorerCharts();
     setExplorerKpisEmpty();
@@ -2431,8 +3167,8 @@ function renderExplorerTrend(filtered) {
 
   const selectedYears = [...explorerState.years].sort();
 
-  if (selectedYears.length > 1) {
-    // Multiple years selected — one line per year, x-axis = month name (Jan–Dec), for easy comparison
+  if (!explorerRangeMode && selectedYears.length > 1) {
+    // Multiple years selected (cross-product mode) — one line per year, x-axis = month name (Jan–Dec), for easy comparison
     const byYear = {};
     filtered.forEach(r => {
       const d = new Date(r['Date']);
