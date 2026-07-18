@@ -941,6 +941,21 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .multiselect-option input[type="checkbox"] { accent-color: var(--cyan); width: 14px; height: 14px; cursor: pointer; }
 
 .explorer-active-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+
+/* ── Explorer custom range picker ── */
+.explorer-range-row { margin-top: 16px; }
+.explorer-range-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.explorer-range-divider::before, .explorer-range-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.explorer-range-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.explorer-range-arrow { font-size: 14px; color: var(--muted); padding-bottom: 8px; }
+.explorer-range-note { font-size: 10px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
 .filter-chip {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px; border-radius: 20px;
@@ -1137,9 +1152,19 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
         Explorer
       </button>
-      <button class="nav-btn" onclick="showView('employee',this)">
+      <button class="nav-btn" id="navEmployeeBtn" onclick="showView('employee',this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
         Employee Analysis
+      </button>
+      <button class="nav-btn" onclick="showView('watchlist',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        Watchlist
+        <span class="nav-badge" id="watchlistBadge" style="display:none">0</span>
+      </button>
+      <button class="nav-btn" onclick="showView('hospital',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        Hospital Reference
+        <span class="nav-badge" id="hospitalBadge" style="display:none;background:var(--red-dim);color:var(--red)">0</span>
       </button>
     </div>
 
@@ -1601,7 +1626,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
         <div class="chart-card no-clip" style="margin-bottom:16px">
           <div class="card-header">
             <div class="card-title">Explorer filters</div>
-            <div class="card-sub">Select one or more years and months to cross-analyze the register</div>
+            <div class="card-sub">Compare multiple years/months, or set a custom range that spans a year boundary (e.g. Apr 2025 → Mar 2026)</div>
           </div>
 
           <div class="explorer-filter-row">
@@ -1650,6 +1675,30 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               Reset
             </button>
+          </div>
+
+          <div class="explorer-range-row">
+            <div class="explorer-range-divider"><span>or use a custom range</span></div>
+            <div class="explorer-range-controls">
+              <div class="explorer-filter-group">
+                <label class="explorer-filter-label">From</label>
+                <select id="explorerRangeFrom" class="year-select" onchange="onExplorerRangeChange()">
+                  <option value="">—</option>
+                </select>
+              </div>
+              <div class="explorer-range-arrow">→</div>
+              <div class="explorer-filter-group">
+                <label class="explorer-filter-label">To</label>
+                <select id="explorerRangeTo" class="year-select" onchange="onExplorerRangeChange()">
+                  <option value="">—</option>
+                </select>
+              </div>
+              <button class="btn-refresh" onclick="clearExplorerRange()" style="align-self:flex-end">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Clear range
+              </button>
+            </div>
+            <div class="explorer-range-note">E.g. select April 2025 → March 2026 to span across a year boundary. Using a range overrides the Year/Month filters above.</div>
           </div>
 
           <div class="explorer-active-chips" id="explorerActiveChips"></div>
@@ -1867,6 +1916,222 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
               </table>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- REPEAT-INCIDENT WATCHLIST                               -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="view-watchlist" class="view">
+
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Repeat-Incident Employee Watchlist</div>
+            <div class="card-sub" id="wlPeriodLabel">Employees with 2 or more recorded incidents</div>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="wlKpiRow"></div>
+
+        <!-- Charts -->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Top employees by incident count</div>
+            <div class="card-sub">Highest-frequency repeat-incident employees</div>
+          </div>
+          <div class="chart-wrap" style="height:320px">
+            <canvas id="wlTopChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By department</div>
+              <div class="card-sub">Where repeat-incident employees are concentrated</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="wlDeptChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By primary injury type</div>
+              <div class="card-sub">Most common recurring injury per employee</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="wlInjuryChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By primary body part</div>
+              <div class="card-sub">Most frequently affected body part per employee</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="wlBodyChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">Incident frequency distribution</div>
+              <div class="card-sub">How many employees fall into each incident-count bucket</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="wlFreqChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="chart-card">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div>
+              <div class="card-title">All repeat-incident employees</div>
+              <div class="card-sub" id="wlTableSub">Loading…</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input type="text" id="wlSearch" class="record-search" placeholder="Search name, card no…" oninput="onWatchlistSearch()">
+              <select id="wlDeptFilter" class="year-select" onchange="onWatchlistSearch()">
+                <option value="">All departments</option>
+              </select>
+              <select id="wlSortBy" class="year-select" onchange="onWatchlistSearch()">
+                <option value="count-desc">Sort: Most incidents</option>
+                <option value="count-asc">Sort: Fewest incidents</option>
+                <option value="name-asc">Sort: Name A–Z</option>
+                <option value="recent-desc">Sort: Most recent incident</option>
+              </select>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th><th>Card No</th><th>Total</th><th>Primary Dept</th>
+                  <th>Primary Injury</th><th>Primary Body Part</th><th>First</th><th>Last</th><th>Span</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="wlTableBody">
+                <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="wlPaginationWrap"></div>
+        </div>
+
+        <div class="empty-state" id="wlEmptyState" style="display:none">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+          <div>No repeat-incident employees found</div>
+          <div style="font-size:11px;margin-top:5px">Connect your Apps Script URL to see this data</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- HOSPITAL REFERENCE                                      -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="view-hospital" class="view">
+
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Hospital-Referred Cases</div>
+            <div class="card-sub" id="hospPeriodLabel">Cases marked as hospital-referred in the incident register</div>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="hospKpiRow"></div>
+
+        <!-- Trend -->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Hospital referrals over time</div>
+            <div class="card-sub">Monthly count of hospital-referred cases</div>
+          </div>
+          <div class="chart-wrap" style="height:240px">
+            <canvas id="hospTrendChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By department</div>
+              <div class="card-sub">Where hospital-referred cases originate</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="hospDeptChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By injury type</div>
+              <div class="card-sub">What led to hospital referral</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="hospInjuryChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By body part</div>
+              <div class="card-sub">Most affected body part in hospital-referred cases</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="hospBodyChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header">
+              <div class="card-title">By gender</div>
+              <div class="card-sub">Gender split of hospital-referred cases</div>
+            </div>
+            <div class="chart-wrap" style="height:240px">
+              <canvas id="hospGenderChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="chart-card">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div>
+              <div class="card-title">All hospital-referred cases</div>
+              <div class="card-sub" id="hospTableSub">Loading…</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input type="text" id="hospSearch" class="record-search" placeholder="Search name, card no, description…" oninput="onHospitalSearch()">
+              <select id="hospDeptFilter" class="year-select" onchange="onHospitalSearch()">
+                <option value="">All departments</option>
+              </select>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Card No</th><th>Name</th><th>Description</th>
+                  <th>Nature</th><th>Injury</th><th>Body Part</th><th>Gender</th><th>Section</th><th>Dept</th>
+                </tr>
+              </thead>
+              <tbody id="hospTableBody">
+                <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" id="hospPaginationWrap"></div>
+        </div>
+
+        <div class="empty-state" id="hospEmptyState" style="display:none">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          <div>No hospital-referred cases found</div>
+          <div style="font-size:11px;margin-top:5px" id="hospEmptyNote">Connect your Apps Script URL to see this data</div>
         </div>
       </div>
 
