@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<script src="https://pftsafety.github.io/pftsafety/config.js"></script>
-<script src="https://pftsafety.github.io/pftsafety/auth-guard.js"></script>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2169,6 +2167,41 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <div>No prediction generated yet</div>
             <div style="font-size:11px;margin-top:5px">Click Generate Now to run AI analysis on your incident data</div>
+          </div>
+        </div>
+
+        <div class="chart-card no-clip" style="margin-top:16px">
+          <div class="card-header">
+            <div class="card-title" style="font-size:15px">Custom Analytics Report</div>
+            <div class="card-sub">Ask in plain English — e.g. "compare Jan-Mar 2024 vs 2025" or "summary of the last 3 months"</div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+            <input type="text" id="customReportQuery" class="record-search" style="flex:1;min-width:280px" placeholder="e.g. Compare January-March 2024 vs 2025" onkeydown="if(event.key==='Enter') triggerCustomReport()">
+            <button class="btn-generate" id="customReportBtn" onclick="triggerCustomReport()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Generate
+            </button>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+            <span class="filter-chip dim" style="cursor:pointer" onclick="useCustomReportExample(this)">Last 3 months summary</span>
+            <span class="filter-chip dim" style="cursor:pointer" onclick="useCustomReportExample(this)">This year vs last year</span>
+            <span class="filter-chip dim" style="cursor:pointer" onclick="useCustomReportExample(this)">Compare Jan-Mar 2024 vs 2025</span>
+            <span class="filter-chip dim" style="cursor:pointer" onclick="useCustomReportExample(this)">Q1 2026 report</span>
+          </div>
+
+          <div class="ai-loading" id="customReportLoading" style="display:none">
+            <div class="ai-loading-ring"></div>
+            <div class="ai-loading-text">Interpreting your request and analysing the data…</div>
+          </div>
+
+          <div id="customReportOutput" style="display:none"></div>
+
+          <div class="empty-state" id="customReportEmpty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <div>No custom report generated yet</div>
+            <div style="font-size:11px;margin-top:5px">Type a request above and click Generate</div>
           </div>
         </div>
       </div>
