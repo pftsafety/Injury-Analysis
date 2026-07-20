@@ -199,6 +199,7 @@ async function loadAll() {
     renderAll();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
     loadPrediction();
+    loadLatestCustomReport();
   } catch (e) {
     console.error(e);
     document.getElementById('configBanner').classList.add('show');
@@ -3412,6 +3413,189 @@ function renderExplorerTimeAnalysis(filtered) {
 
   if (!hasTimeData && sub) sub.textContent += ' (no Time data recorded for this selection)';
 }
+
+// ── Custom Analytics Report (natural-language, on-demand) ────────
+async function triggerCustomReport() {
+  const input = document.getElementById('customReportQuery');
+  const query = input.value.trim();
+  if (!query) { input.focus(); return; }
+
+  const btn = document.getElementById('customReportBtn');
+  const loading = document.getElementById('customReportLoading');
+  const output = document.getElementById('customReportOutput');
+  const empty = document.getElementById('customReportEmpty');
+
+  btn.disabled = true;
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 0.8s linear infinite;width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Generating…`;
+  loading.style.display = 'flex';
+  output.style.display = 'none';
+  empty.style.display = 'none';
+
+  if (APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
+    await new Promise(r => setTimeout(r, 2200));
+    renderCustomReport(DEMO_CUSTOM_REPORT);
+    loading.style.display = 'none';
+    resetCustomReportBtn(btn);
+    return;
+  }
+
+  try {
+    const result = await api('custom_report', `query=${encodeURIComponent(query)}`);
+    if (result.error) {
+      empty.style.display = 'block';
+      const msgDiv = empty.querySelector('div');
+      if (msgDiv) msgDiv.textContent = result.error;
+    } else {
+      renderCustomReport(result);
+    }
+  } catch(e) {
+    empty.style.display = 'block';
+    const msgDiv = empty.querySelector('div');
+    if (msgDiv) msgDiv.textContent = 'Error: ' + e.message;
+  } finally {
+    loading.style.display = 'none';
+    resetCustomReportBtn(btn);
+  }
+}
+
+function resetCustomReportBtn(btn) {
+  btn.disabled = false;
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Generate`;
+}
+
+function useCustomReportExample(el) {
+  const input = document.getElementById('customReportQuery');
+  input.value = el.textContent.trim();
+  input.focus();
+}
+
+async function loadLatestCustomReport() {
+  if (APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) return;
+  try {
+    const result = await api('get_custom_report');
+    if (result && result.report) renderCustomReport(result);
+  } catch(e) { console.warn('Custom report cache load failed', e); }
+}
+
+function renderCustomReport(result) {
+  const output = document.getElementById('customReportOutput');
+  const empty = document.getElementById('customReportEmpty');
+  if (!output) return;
+  empty.style.display = 'none';
+
+  const r = result.report || {};
+  const periodStats = result.periodStats || [];
+  const severityColor = {
+    Low:    { bg: 'var(--green-dim)', fg: '#059669' },
+    Medium: { bg: 'var(--amber-dim)', fg: '#d97706' },
+    High:   { bg: 'var(--red-dim)',   fg: '#dc2626' }
+  };
+
+  const periodCardsHtml = periodStats.map(ps => {
+    const summary = (r.periodSummaries || []).find(p => p.label === ps.label) || {};
+    return `
+      <div class="review-card">
+        <div class="review-card-title">${ps.label}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text);font-family:var(--font-display);margin-bottom:2px">${ps.count}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">incidents recorded</div>
+        <div class="review-insight-text">${summary.narrative || ''}</div>
+        ${summary.topDept ? `<div style="margin-top:8px;font-size:11px;color:var(--muted2)"><strong>Top dept:</strong> ${summary.topDept}</div>` : ''}
+        ${summary.topInjury ? `<div style="font-size:11px;color:var(--muted2)"><strong>Top injury:</strong> ${summary.topInjury}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const comparisonHtml = (result.mode === 'comparison' && (r.comparisonInsights||[]).length) ? `
+    <div class="section-header" style="margin-top:18px"><div class="section-title">What changed</div></div>
+    ${(r.comparisonInsights||[]).map(c => `
+      <div class="root-cause-item">
+        <div class="root-cause-theme">${c.insight}</div>
+        <div class="root-cause-detail">${c.detail}</div>
+      </div>
+    `).join('')}
+  ` : '';
+
+  const findingsHtml = (r.keyFindings||[]).length ? `
+    <div class="section-header" style="margin-top:18px"><div class="section-title">Key findings</div></div>
+    <div class="risk-cards">
+      ${(r.keyFindings||[]).map(f => {
+        const sc = severityColor[f.severity] || severityColor.Medium;
+        return `
+        <div class="risk-card">
+          <div>
+            <div class="risk-name">${f.finding}</div>
+            <div class="risk-detail">${f.detail}</div>
+            <div class="risk-badges"><span class="badge" style="background:${sc.bg};color:${sc.fg}">${f.severity || 'Medium'}</span></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  ` : '';
+
+  const recsHtml = (r.recommendations||[]).length ? `
+    <div class="section-header" style="margin-top:18px"><div class="section-title">Recommendations</div></div>
+    <div class="action-cards">
+      ${(r.recommendations||[]).map((a,i) => {
+        const numStyle = a.priority==='Urgent' ? 'background:var(--red-dim);color:var(--red)' : a.priority==='High' ? 'background:var(--amber-dim);color:var(--amber)' : 'background:var(--cyan-dim);color:var(--cyan)';
+        const badgeClass = a.priority==='Urgent' ? 'badge-red' : a.priority==='High' ? 'badge-amber' : 'badge-muted';
+        return `
+        <div class="action-card">
+          <div class="action-num" style="${numStyle}">${i+1}</div>
+          <div>
+            <div class="action-title">${a.action} <span class="badge ${badgeClass}" style="margin-left:6px">${a.priority}</span></div>
+            <div class="action-desc">${a.description}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  ` : '';
+
+  output.innerHTML = `
+    <div class="pred-hero">
+      <div class="pred-month">${result.mode === 'comparison' ? 'Comparison Report' : 'Custom Report'} · "${result.query}"</div>
+      <div class="pred-summary">${r.summary || ''}</div>
+      ${result.generatedAt ? `<div class="pred-meta">Generated ${new Date(result.generatedAt).toLocaleString()}</div>` : ''}
+    </div>
+    <div class="review-grid" style="grid-template-columns:repeat(${Math.max(1, Math.min(periodStats.length, 3))},1fr)">
+      ${periodCardsHtml}
+    </div>
+    ${comparisonHtml}
+    ${findingsHtml}
+    ${recsHtml}
+  `;
+  output.style.display = 'block';
+}
+
+const DEMO_CUSTOM_REPORT = {
+  query: "Compare Jan-Mar 2024 vs 2025",
+  mode: "comparison",
+  generatedAt: new Date().toISOString(),
+  periodStats: [
+    { label: "Jan-Mar 2024", count: 58 },
+    { label: "Jan-Mar 2025", count: 71 }
+  ],
+  report: {
+    title: "Q1 Comparison: 2024 vs 2025",
+    summary: "Q1 2025 recorded 71 incidents versus 58 in Q1 2024 — a 22% year-on-year increase. Primary Production and Packing remained the top two departments in both years, but Engineering's incident count nearly doubled, driven by a rise in machine-guarding related injuries.",
+    periodSummaries: [
+      { label: "Jan-Mar 2024", narrative: "58 incidents recorded, with abrasions and minor cuts dominating the injury mix. Primary Production accounted for the largest share.", topDept: "Primary Production", topInjury: "Abrasion" },
+      { label: "Jan-Mar 2025", narrative: "71 incidents recorded, a notable increase driven by Engineering. Foreign body eye injuries also rose compared to the same period last year.", topDept: "Primary Production", topInjury: "Abrasion" }
+    ],
+    comparisonInsights: [
+      { insight: "22% overall increase", detail: "Total incidents rose from 58 to 71 (+13 incidents), continuing the gradual upward trend seen since 2022." },
+      { insight: "Engineering nearly doubled", detail: "Engineering incidents rose from 8 in Q1 2024 to 15 in Q1 2025, the largest relative increase of any department." },
+      { insight: "Eye injuries up notably", detail: "Foreign body eye injuries increased from 4 to 9 cases, suggesting a possible PPE compliance gap in CED/Mechanical sections." }
+    ],
+    keyFindings: [
+      { finding: "Engineering department trend reversal", detail: "After several stable quarters, Engineering saw a sharp rise — worth investigating machine-guarding and lockout/tagout compliance.", severity: "High" },
+      { finding: "Eye protection gap", detail: "The jump in foreign body eye injuries points to inconsistent goggle use during drilling/cutting operations.", severity: "Medium" }
+    ],
+    recommendations: [
+      { action: "Engineering safety audit", priority: "Urgent", description: "Conduct a focused machine-guarding and LOTO compliance audit in Engineering given the near-doubling of incidents." },
+      { action: "PPE spot checks — CED/Mechanical", priority: "High", description: "Introduce unannounced eye-protection compliance checks during drilling and cutting operations." }
+    ]
+  }
+};
 
 // ── Init ──────────────────────────────────────────────────────
 loadAll();
