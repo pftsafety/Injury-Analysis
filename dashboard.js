@@ -143,13 +143,14 @@ let charts = {};
 let appData = {};
 
 // ── Nav ──────────────────────────────────────────────────────
+const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', prediction:'AI Prediction' };
+
 function showView(id, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
-  const titles = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', prediction:'AI Prediction' };
-  document.getElementById('viewTitle').textContent = titles[id] || id;
+  document.getElementById('viewTitle').textContent = VIEW_TITLES[id] || id;
 }
 
 // ── API ──────────────────────────────────────────────────────
@@ -2233,6 +2234,38 @@ function goToPage(n) {
   renderRecordsTable();
 }
 
+// ── Universal "Print this view" (works on every tab) ────────────
+function printCurrentView() {
+  const activeView = document.querySelector('.view.active');
+  const viewId = activeView ? activeView.id.replace('view-', '') : 'overview';
+  const title = VIEW_TITLES[viewId] || 'Report';
+
+  document.getElementById('printOnlyTitle').textContent = `SHE Injury Analytics — ${title}`;
+  document.getElementById('printOnlySub').textContent = `Generated ${new Date().toLocaleString()}`;
+
+  let filterText = '';
+  if (viewId === 'explorer') {
+    const chipEls = document.querySelectorAll('#explorerActiveChips .filter-chip');
+    filterText = Array.from(chipEls).map(el => el.textContent.trim()).join(' · ');
+  } else {
+    const filterSourceMap = { records: 'recordCount', watchlist: 'wlTableSub', hospital: 'hospTableSub' };
+    const sourceId = filterSourceMap[viewId];
+    if (sourceId) {
+      const el = document.getElementById(sourceId);
+      if (el) filterText = el.textContent.trim();
+    }
+  }
+  document.getElementById('printOnlyFilters').textContent = filterText;
+
+  const prevTitle = document.title;
+  document.title = `SHE Injury Analytics - ${title} - ${new Date().toISOString().split('T')[0]}`;
+
+  const restoreTitle = () => { document.title = prevTitle; window.removeEventListener('afterprint', restoreTitle); };
+  window.addEventListener('afterprint', restoreTitle);
+
+  window.print();
+}
+
 // ── Records Export: Excel ──────────────────────────────────────
 function exportRecordsExcel() {
   const filtered = getFilteredRecords();
@@ -2299,6 +2332,156 @@ function printRecordsPdf() {
     </head><body>
       <h1>SHE Incident Register</h1>
       <div class="sub">Exported ${new Date().toLocaleString()} · ${filtered.length} record(s) · sorted newest first</div>
+      <table>
+        <thead><tr><th>Date</th><th>Card No</th><th>Name</th><th>Description</th><th>Nature</th><th>Injury Type</th><th>Body Part</th><th>Gender</th><th>Section</th><th>Dept</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </body></html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 350);
+}
+
+// ── Watchlist Export: Excel ─────────────────────────────────────
+function exportWatchlistExcel() {
+  const filtered = getFilteredWatchlist();
+  if (!filtered.length) { alert('No employees to export.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel export library failed to load. Please refresh and try again.'); return; }
+
+  const data = filtered.map(e => ({
+    'Name': e.name || '',
+    'Card No': e.cardNo || '',
+    'Total Incidents': e.totalIncidents,
+    'Primary Dept': e.primaryDept || '',
+    'Primary Injury Type': e.primaryInjuryType || '',
+    'Primary Body Part': e.primaryBodyPart || '',
+    'First Incident': e.firstIncidentDate || '',
+    'Last Incident': e.lastIncidentDate || '',
+    'Span (days)': e.spanDays != null ? e.spanDays : ''
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:18},{wch:10},{wch:12},{wch:18},{wch:16},{wch:16},{wch:12},{wch:12},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Repeat-Incident Watchlist');
+  XLSX.writeFile(wb, `SHE_Watchlist_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ── Watchlist Export: Print / PDF ───────────────────────────────
+function printWatchlistPdf() {
+  const filtered = getFilteredWatchlist();
+  if (!filtered.length) { alert('No employees to print.'); return; }
+
+  const rowsHtml = filtered.map(e => `
+    <tr>
+      <td>${e.name || '—'}</td>
+      <td>${e.cardNo || '—'}</td>
+      <td>${e.totalIncidents}</td>
+      <td>${e.primaryDept || '—'}</td>
+      <td>${e.primaryInjuryType || '—'}</td>
+      <td>${e.primaryBodyPart || '—'}</td>
+      <td>${e.firstIncidentDate || '—'}</td>
+      <td>${e.lastIncidentDate || '—'}</td>
+      <td>${e.spanDays != null ? e.spanDays + 'd' : '—'}</td>
+    </tr>
+  `).join('');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { alert('Please allow popups for this site to use Print / PDF export.'); return; }
+
+  printWindow.document.write(`
+    <!DOCTYPE html><html><head><title>SHE Repeat-Incident Watchlist</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
+      h1 { font-size: 18px; margin-bottom: 4px; }
+      .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; vertical-align: top; }
+      th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 9px; }
+      tr:nth-child(even) { background: #f8fafc; }
+      @media print { body { padding: 0; } }
+    </style>
+    </head><body>
+      <h1>SHE Repeat-Incident Employee Watchlist</h1>
+      <div class="sub">Exported ${new Date().toLocaleString()} · ${filtered.length} employee(s)${appData.repeatIncidents?.periodLabel ? ' · ' + appData.repeatIncidents.periodLabel : ''}</div>
+      <table>
+        <thead><tr><th>Name</th><th>Card No</th><th>Total</th><th>Primary Dept</th><th>Primary Injury</th><th>Primary Body Part</th><th>First</th><th>Last</th><th>Span</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </body></html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 350);
+}
+
+// ── Hospital Reference Export: Excel ────────────────────────────
+function exportHospitalExcel() {
+  const filtered = getFilteredHospitalCases();
+  if (!filtered.length) { alert('No cases to export.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel export library failed to load. Please refresh and try again.'); return; }
+
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '').toString();
+  const data = filtered.map(r => ({
+    'Date': r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '',
+    'Card No': cardNoOf(r),
+    'Name': r['Name'] || '',
+    'Description of Incident': r['Description of Incident'] || '',
+    'Nature of Incident': r['Nature of Incident'] || '',
+    'Type of Injury': r['Type of Injury'] || '',
+    'Affected Part': r['Affected part'] || '',
+    'Gender': r['Gender'] || '',
+    'Section': r['Section'] || '',
+    'Dept': r['Dept'] || ''
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:11},{wch:10},{wch:16},{wch:40},{wch:22},{wch:16},{wch:14},{wch:9},{wch:14},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Hospital Referred');
+  XLSX.writeFile(wb, `SHE_Hospital_Referred_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ── Hospital Reference Export: Print / PDF ──────────────────────
+function printHospitalPdf() {
+  const filtered = getFilteredHospitalCases();
+  if (!filtered.length) { alert('No cases to print.'); return; }
+
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '—').toString();
+  const rowsHtml = filtered.map(r => `
+    <tr>
+      <td>${r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '—'}</td>
+      <td>${cardNoOf(r)}</td>
+      <td>${r['Name']||'—'}</td>
+      <td>${r['Description of Incident']||'—'}</td>
+      <td>${r['Nature of Incident']||'—'}</td>
+      <td>${r['Type of Injury']||'—'}</td>
+      <td>${r['Affected part']||'—'}</td>
+      <td>${r['Gender']||'—'}</td>
+      <td>${r['Section']||'—'}</td>
+      <td>${r['Dept']||'—'}</td>
+    </tr>
+  `).join('');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { alert('Please allow popups for this site to use Print / PDF export.'); return; }
+
+  printWindow.document.write(`
+    <!DOCTYPE html><html><head><title>SHE Hospital-Referred Cases</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
+      h1 { font-size: 18px; margin-bottom: 4px; }
+      .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; vertical-align: top; }
+      th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 9px; }
+      tr:nth-child(even) { background: #f8fafc; }
+      @media print { body { padding: 0; } }
+    </style>
+    </head><body>
+      <h1>SHE Hospital-Referred Cases</h1>
+      <div class="sub">Exported ${new Date().toLocaleString()} · ${filtered.length} case(s) · sorted newest first</div>
       <table>
         <thead><tr><th>Date</th><th>Card No</th><th>Name</th><th>Description</th><th>Nature</th><th>Injury Type</th><th>Body Part</th><th>Gender</th><th>Section</th><th>Dept</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
