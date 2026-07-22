@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<script src="https://pftsafety.github.io/pftsafety/config.js"></script>
-<script src="https://pftsafety.github.io/pftsafety/auth-guard.js"></script>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -782,10 +780,35 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .emp-suggestion-count { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--red); background: var(--red-dim); padding: 2px 7px; border-radius: 20px; }
 
 /* Print styles */
+#printOnlyHeader { display: none; }
 @media print {
-  .sidebar, .topbar, .pagination, .card-header button, .btn-export, .nav-btn { display: none !important; }
-  .chart-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+  /* Hide all interactive chrome */
+  .sidebar, .topbar, .pagination, .btn-export, .nav-btn,
+  .record-search, .year-select, .multiselect, .btn-refresh,
+  .btn-generate, .btn-email, .alert-bell-wrap, .config-banner,
+  #pageLoader, .modal, .modal-overlay, input, select,
+  .action-row-buttons, button { display: none !important; }
+
+  /* Only the currently active tab's content prints */
+  .view { display: none !important; }
+  .view.active { display: block !important; }
+
+  /* Print-only header showing report title, timestamp, active filters */
+  #printOnlyHeader { display: block !important; margin-bottom: 18px; }
+  #printOnlyTitle { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: #0f172a; }
+  #printOnlySub { font-size: 11px; color: #64748b; margin-top: 3px; }
+  #printOnlyFilters { font-size: 11px; color: #475569; margin-top: 6px; }
+
   body { background: #fff !important; }
+  .main { width: 100% !important; }
+  .content { padding: 0 20px !important; }
+
+  .chart-card, .kpi-card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; }
+  .chart-grid, .kpi-grid { break-inside: avoid; }
+
+  canvas { max-width: 100% !important; }
+
+  a[href]::after { content: none !important; } /* no printed URL clutter */
 }
 
 /* ── Email button ── */
@@ -1205,6 +1228,10 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
         </div>
         <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+        <button class="btn-refresh" id="printViewBtn" onclick="printCurrentView()" title="Print or save this view as PDF">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print
+        </button>
         <button class="btn-refresh" id="refreshBtn" onclick="loadAll()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Refresh
@@ -1212,6 +1239,11 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
       </div>
     </div>
 
+    <div id="printOnlyHeader" style="display:none">
+      <div id="printOnlyTitle"></div>
+      <div id="printOnlySub"></div>
+      <div id="printOnlyFilters"></div>
+    </div>
     <div class="content">
       <div id="configBanner" class="config-banner">
         ⚠ Set your Apps Script URL in <code style="background:rgba(245,158,11,0.1);padding:1px 5px;border-radius:4px">dashboard.js</code> line 5 — currently showing demo data.
@@ -2005,6 +2037,14 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
                 <option value="name-asc">Sort: Name A–Z</option>
                 <option value="recent-desc">Sort: Most recent incident</option>
               </select>
+              <button class="btn-export" onclick="exportWatchlistExcel()" title="Export to Excel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+                Excel
+              </button>
+              <button class="btn-export btn-export-pdf" onclick="printWatchlistPdf()" title="Print / Save as PDF">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Print / PDF
+              </button>
             </div>
           </div>
           <div class="tbl-wrap">
@@ -2110,6 +2150,14 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
               <select id="hospDeptFilter" class="year-select" onchange="onHospitalSearch()">
                 <option value="">All departments</option>
               </select>
+              <button class="btn-export" onclick="exportHospitalExcel()" title="Export to Excel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+                Excel
+              </button>
+              <button class="btn-export btn-export-pdf" onclick="printHospitalPdf()" title="Print / Save as PDF">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Print / PDF
+              </button>
             </div>
           </div>
           <div class="tbl-wrap">
