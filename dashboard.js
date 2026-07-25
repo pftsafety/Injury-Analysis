@@ -33,6 +33,34 @@ Chart.defaults.plugins.tooltip.displayColors = true;
 // Subtle shadow so the white tooltip still reads as elevated above white cards
 Chart.defaults.plugins.tooltip.footerColor = "#64748b";
 
+// ── Value labels shown inside charts (bars/slices/points) ──────
+if (typeof ChartDataLabels !== 'undefined') {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', {
+    display: function(context) {
+      const val = context.dataset.data[context.dataIndex];
+      const v = (val && typeof val === 'object') ? val.y : val;
+      return v !== null && v !== undefined && v !== 0; // hide zero/empty values to reduce clutter
+    },
+    color: function(context) {
+      return context.chart.config.type === 'line' ? '#0f172a' : '#ffffff';
+    },
+    anchor: function(context) {
+      return context.chart.config.type === 'line' ? 'end' : 'center';
+    },
+    align: function(context) {
+      return context.chart.config.type === 'line' ? 'top' : 'center';
+    },
+    offset: 4,
+    font: { size: 10, weight: '700', family: "'Inter', system-ui, sans-serif" },
+    formatter: function(value) {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'object' && value.y !== undefined) value = value.y;
+      return value;
+    }
+  });
+}
+
 const COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0ea5e9","#db2777","#65a30d","#ea580c","#0d9488"];
 const GRID = "rgba(15,23,42,0.06)";
 const BORDER = "rgba(15,23,42,0.12)";
@@ -661,7 +689,8 @@ function renderTrendChart() {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 18, boxHeight: 2, padding: 12, font: { size: 11 }, color: '#475569' } },
-          tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10, titleColor: '#0f172a', bodyColor: '#475569', displayColors: true }
+          tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, padding: 10, titleColor: '#0f172a', bodyColor: '#475569', displayColors: true },
+          datalabels: { display: false } // multiple overlapping lines — inline labels would collide
         },
         scales: {
           x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
@@ -1042,7 +1071,8 @@ function renderDeptTrendChart() {
       animation: { duration: 800 },
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } }
+        legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } },
+        datalabels: { display: false } // up to 6 overlapping department lines — inline labels would collide
       },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month'), ticks: { maxTicksLimit: 14 } },
@@ -3385,7 +3415,7 @@ function renderExplorerTrend(filtered) {
         responsive: true, maintainAspectRatio: false,
         animation: { duration: 700 },
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 16, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } } },
+        plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 16, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } }, datalabels: { display: false } },
         scales: {
           x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
           y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
