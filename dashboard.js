@@ -179,7 +179,34 @@ function showView(id, btn) {
   document.getElementById('view-' + id).classList.add('active');
   if (btn) btn.classList.add('active');
   document.getElementById('viewTitle').textContent = VIEW_TITLES[id] || id;
+  closeMobileNav(); // auto-close the drawer after picking a tab on mobile
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
+
+// ── Mobile nav (hamburger drawer) ────────────────────────────
+function toggleMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('mobileNavBackdrop');
+  const isOpen = sidebar.classList.contains('mobile-open');
+  if (isOpen) closeMobileNav();
+  else {
+    sidebar.classList.add('mobile-open');
+    backdrop.classList.add('open');
+    document.body.style.overflow = 'hidden'; // prevent background scroll while drawer is open
+  }
+}
+
+function closeMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('mobileNavBackdrop');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+  if (backdrop) backdrop.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 900) closeMobileNav();
+});
 
 // ── API ──────────────────────────────────────────────────────
 async function api(action, params) {

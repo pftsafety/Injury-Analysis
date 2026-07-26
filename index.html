@@ -1085,11 +1085,40 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .section-action:hover { color: var(--cyan); }
 
 /* ── Responsive ── */
+/* ── Mobile nav (hamburger + off-canvas drawer) ── */
+.mobile-menu-btn {
+  display: none;
+  width: 34px; height: 34px;
+  align-items: center; justify-content: center;
+  background: var(--card); border: 1px solid var(--border2);
+  border-radius: 9px; cursor: pointer; color: var(--muted2);
+  flex-shrink: 0;
+}
+.mobile-menu-btn svg { width: 16px; height: 16px; }
+.mobile-nav-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,0.45);
+  z-index: 190;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.mobile-nav-backdrop.open { display: block; opacity: 1; }
+
 @media (max-width: 1100px) {
   .kpi-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 900px) {
-  .sidebar { display: none; }
+  .mobile-menu-btn { display: flex; }
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 12px 0 32px rgba(15,23,42,0.18);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
   .grid-2, .grid-1-2, .grid-2-1 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr 1fr; }
   .insight-strip { grid-template-columns: 1fr; }
@@ -1126,12 +1155,20 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 </div>
 
 <div class="shell">
+  <!-- Mobile nav backdrop -->
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="closeMobileNav()"></div>
+
   <!-- Sidebar -->
-  <nav class="sidebar">
-    <div class="sidebar-brand">
-      <div class="brand-icon">SHE</div>
-      <div class="brand-name">Injury Intelligence</div>
-      <div class="brand-sub">2015 – 2026 · Total Work Injury</div>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+      <div>
+        <div class="brand-icon">SHE</div>
+        <div class="brand-name">Injury Intelligence</div>
+        <div class="brand-sub">2015 – 2026 · Total Work Injury</div>
+      </div>
+      <button class="mobile-menu-btn" id="mobileCloseBtn" onclick="closeMobileNav()" aria-label="Close menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
 
     <div class="nav-group">
@@ -1211,6 +1248,9 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
   <div class="main">
     <div class="topbar">
       <div class="topbar-left">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileNav()" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         <div>
           <div class="topbar-title" id="viewTitle">Dashboard</div>
           <div class="topbar-breadcrumb" id="topbarBreadcrumb">Total Work Injury Register · 2015–2026</div>
