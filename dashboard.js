@@ -330,7 +330,7 @@ function loadDemoData() {
       byInjuryType: [['Trauma', 6], ['Fracture', 4], ['Foreign Body', 4], ['Burn', 3], ['Laceration', 1]],
       byBodyPart: [['Right Hand', 5], ['Right Eye', 4], ['Left Foot', 3], ['Head', 3], ['Right Foot', 2], ['Left Hand', 1]],
       byGender: [['Male', 13], ['Female', 5]],
-      monthly: monthly.slice(-12).map(m => ({ month: m.month, count: Math.max(0, Math.round(m.count * 0.08)) })),
+      monthly: monthly.slice(-30).map(m => ({ month: m.month, count: Math.max(0, Math.round(m.count * 0.08)) })),
       cases: []
     }
   };
@@ -1643,6 +1643,9 @@ function renderHospitalView() {
   const data = appData.hospitalReferred || { total: 0, totalAllIncidents: 0, percentOfAll: 0, cases: [], monthly: [], byDept: [], byInjuryType: [], byBodyPart: [], byGender: [] };
   const cases = data.cases || [];
 
+  // Reset the trend chart back to the yearly view on every fresh load/refresh
+  hospitalTrendState = { view: 'year', selectedYear: null };
+
   const badge = document.getElementById('hospitalBadge');
   if (badge) {
     if (data.total > 0) {
@@ -1733,42 +1736,90 @@ function clearHospitalCharts() {
   });
 }
 
+// ── Hospital trend: year view by default, click a bar to drill into its months ──
+let hospitalTrendState = { view: 'year', selectedYear: null };
+
 function renderHospitalTrendChart(data) {
   const canvas = document.getElementById('hospTrendChart');
   if (!canvas) return;
   if (charts.hospTrend) charts.hospTrend.destroy();
+
   const monthly = data.monthly || [];
-  const labels = monthly.map(m => { const [y,mm] = m.month.split('-'); return `${MONTH_NAMES[+mm-1]} '${y.slice(2)}`; });
+  const sub = document.getElementById('hospTrendSub');
+  const backBtn = document.getElementById('hospTrendBackBtn');
 
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0,0,0,200);
-  gradient.addColorStop(0, 'rgba(220,38,38,0.16)');
-  gradient.addColorStop(1, 'rgba(220,38,38,0)');
+  if (hospitalTrendState.view === 'month' && hospitalTrendState.selectedYear) {
+    // ── Drilled into a specific year — show its 12 months ──
+    const year = hospitalTrendState.selectedYear;
+    const counts = new Array(12).fill(0);
+    monthly.forEach(m => {
+      const [y, mm] = m.month.split('-');
+      if (y === year) counts[+mm - 1] = m.count;
+    });
 
-  charts.hospTrend = new Chart(ctx, {
-    type: 'line',
+    if (backBtn) backBtn.style.display = 'inline-flex';
+    if (sub) sub.textContent = `${year} — month by month`;
+
+    charts.hospTrend = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: MONTH_NAMES,
+        datasets: [{ data: counts, backgroundColor: '#dc2626', borderRadius: 6, maxBarThickness: 46 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 600 },
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Cases') }
+        }
+      }
+    });
+    return;
+  }
+
+  // ── Default: yearly totals — click a bar to drill into that year ──
+  const yearTotals = {};
+  monthly.forEach(m => {
+    const y = m.month.split('-')[0];
+    yearTotals[y] = (yearTotals[y] || 0) + m.count;
+  });
+  const years = Object.keys(yearTotals).sort();
+
+  if (backBtn) backBtn.style.display = 'none';
+  if (sub) sub.textContent = 'By year — click a bar to see monthly breakdown';
+
+  charts.hospTrend = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
     data: {
-      labels,
-      datasets: [{
-        data: monthly.map(m => m.count),
-        borderColor: '#dc2626', backgroundColor: gradient,
-        borderWidth: 2.5, tension: 0.4, fill: true,
-        pointRadius: monthly.length > 24 ? 0 : 3,
-        pointBackgroundColor: '#dc2626', pointBorderColor: '#fff', pointBorderWidth: 2,
-        pointHoverRadius: 6
-      }]
+      labels: years,
+      datasets: [{ data: years.map(y => yearTotals[y]), backgroundColor: '#dc2626', borderRadius: 6, maxBarThickness: 60 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      animation: { duration: 700 },
-      interaction: { mode: 'index', intersect: false },
+      animation: { duration: 600 },
+      onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        hospitalTrendState.view = 'month';
+        hospitalTrendState.selectedYear = years[idx];
+        renderHospitalTrendChart(appData.hospitalReferred || data);
+      },
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 16, maxRotation: 0 }, title: axisLabel('Month') },
+        x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Year') },
         y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Cases') }
       }
     }
   });
+}
+
+function hospitalTrendShowYears() {
+  hospitalTrendState.view = 'year';
+  hospitalTrendState.selectedYear = null;
+  renderHospitalTrendChart(appData.hospitalReferred || { monthly: [] });
 }
 
 function renderHospitalDeptChart(data) {
