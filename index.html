@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<script src="https://pftsafety.github.io/pftsafety/config.js"></script>
-<script src="https://pftsafety.github.io/pftsafety/auth-guard.js"></script>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2301,6 +2299,34 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <div>No custom report generated yet</div>
             <div style="font-size:11px;margin-top:5px">Type a request above and click Generate</div>
+          </div>
+        </div>
+
+        <div class="chart-card no-clip" style="margin-top:16px">
+          <div class="card-header">
+            <div class="card-title" style="font-size:15px">Prediction Track Record</div>
+            <div class="card-sub">How accurate the AI's monthly forecasts have been, once the actual results come in</div>
+          </div>
+
+          <div id="accuracyContent" style="display:none">
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="accuracyKpiRow"></div>
+            <div class="chart-wrap" style="height:260px;margin-bottom:16px">
+              <canvas id="accuracyChart"></canvas>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead>
+                  <tr><th>Month</th><th>Predicted</th><th>Actual</th><th>Difference</th><th>Risk Level</th><th>Confidence</th></tr>
+                </thead>
+                <tbody id="accuracyTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="empty-state" id="accuracyEmpty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <div>No track record yet</div>
+            <div style="font-size:11px;margin-top:5px">Tracking starts from the next AI forecast — check back after a month or two of predictions have run their course</div>
           </div>
         </div>
       </div>
