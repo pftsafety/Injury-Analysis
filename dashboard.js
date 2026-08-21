@@ -256,6 +256,7 @@ async function loadAll() {
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
     loadPrediction();
     loadLatestCustomReport();
+    loadPredictionAccuracy();
   } catch (e) {
     console.error(e);
     document.getElementById('configBanner').classList.add('show');
@@ -3885,6 +3886,131 @@ const DEMO_CUSTOM_REPORT = {
       { action: "Engineering safety audit", priority: "Urgent", description: "Conduct a focused machine-guarding and LOTO compliance audit in Engineering given the near-doubling of incidents." },
       { action: "PPE spot checks — CED/Mechanical", priority: "High", description: "Introduce unannounced eye-protection compliance checks during drilling and cutting operations." }
     ]
+  }
+};
+
+// ── Prediction Accuracy Tracking ──────────────────────────────
+async function loadPredictionAccuracy() {
+  if (APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
+    renderPredictionAccuracy(DEMO_ACCURACY);
+    return;
+  }
+  try {
+    const result = await api('prediction_accuracy');
+    renderPredictionAccuracy(result);
+  } catch(e) {
+    console.warn('Prediction accuracy load failed', e);
+  }
+}
+
+function renderPredictionAccuracy(result) {
+  const content = document.getElementById('accuracyContent');
+  const empty = document.getElementById('accuracyEmpty');
+  if (!content || !empty) return;
+
+  const entries = (result && result.entries) || [];
+  const summary = result && result.summary;
+  const comparable = entries.filter(e => e.actual !== null);
+
+  if (!comparable.length) {
+    content.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  content.style.display = 'block';
+
+  // KPIs
+  const accColor = summary.accuracyScore >= 80 ? '#059669' : summary.accuracyScore >= 60 ? '#d97706' : '#dc2626';
+  document.getElementById('accuracyKpiRow').innerHTML = `
+    <div class="kpi-card" style="border-top:2px solid ${accColor}">
+      <div class="kpi-icon" style="background:${accColor}1a;color:${accColor}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="kpi-label">Accuracy Score</div>
+      <div class="kpi-value" style="color:${accColor}">${summary.accuracyScore ?? '—'}%</div>
+      <div class="kpi-sub">100 − mean % error</div>
+    </div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div class="kpi-label">Mean Absolute Error</div>
+      <div class="kpi-value">${summary.meanAbsoluteError}</div>
+      <div class="kpi-sub">incidents, on average</div>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div>
+      <div class="kpi-label">Months Tracked</div>
+      <div class="kpi-value">${summary.monthsTracked}</div>
+      <div class="kpi-sub">with confirmed actuals</div>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div class="kpi-label">Best Forecast</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${summary.bestMonth ? summary.bestMonth.month : '—'}</div>
+      <div class="kpi-sub">${summary.bestMonth ? `Off by ${summary.bestMonth.absError}` : ''}</div>
+    </div>
+  `;
+
+  // Chart: predicted vs actual
+  const canvas = document.getElementById('accuracyChart');
+  if (charts.accuracy) charts.accuracy.destroy();
+  const labels = comparable.map(e => { const [y,m] = e.month.split('-'); return `${MONTH_NAMES[+m-1]} '${y.slice(2)}`; });
+  charts.accuracy = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Predicted', data: comparable.map(e => e.predicted), backgroundColor: 'rgba(37,99,235,0.55)', borderRadius: 5, maxBarThickness: 28 },
+        { label: 'Actual', data: comparable.map(e => e.actual), backgroundColor: '#dc2626', borderRadius: 5, maxBarThickness: 28 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, boxHeight: 12, color: '#475569', font: { size: 11 } } },
+        datalabels: { display: false } // grouped bars — inline labels would crowd
+      },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') }
+      }
+    }
+  });
+
+  // Table
+  document.getElementById('accuracyTableBody').innerHTML = comparable.slice().reverse().map(e => {
+    const diff = e.error;
+    const diffColor = Math.abs(diff) <= 2 ? 'var(--green)' : Math.abs(diff) <= 5 ? 'var(--amber)' : 'var(--red)';
+    const diffText = diff > 0 ? `+${diff} (under)` : diff < 0 ? `${diff} (over)` : 'Exact';
+    const riskBadge = e.riskLevel === 'High' || e.riskLevel === 'Critical' ? 'badge-red' : e.riskLevel === 'Medium' ? 'badge-amber' : 'badge-green';
+    return `
+      <tr>
+        <td style="font-weight:600">${e.month}</td>
+        <td style="font-family:var(--font-mono)">${e.predicted}</td>
+        <td style="font-family:var(--font-mono);font-weight:700">${e.actual}</td>
+        <td style="color:${diffColor};font-weight:600">${diffText}</td>
+        <td><span class="badge ${riskBadge}">${e.riskLevel || '—'}</span></td>
+        <td>${e.confidencePercent != null ? e.confidencePercent + '%' : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+const DEMO_ACCURACY = {
+  entries: [
+    { month: "2026-02", predicted: 21, actual: 19, error: -2, absError: 2, percentError: -10.5, riskLevel: "Medium", confidencePercent: 72 },
+    { month: "2026-03", predicted: 20, actual: 24, error: 4, absError: 4, percentError: 16.7, riskLevel: "Medium", confidencePercent: 70 },
+    { month: "2026-04", predicted: 23, actual: 22, error: -1, absError: 1, percentError: -4.5, riskLevel: "Medium", confidencePercent: 75 },
+    { month: "2026-05", predicted: 22, actual: 27, error: 5, absError: 5, percentError: 18.5, riskLevel: "High", confidencePercent: 68 },
+    { month: "2026-06", predicted: 25, actual: 24, error: -1, absError: 1, percentError: -4.2, riskLevel: "Medium", confidencePercent: 74 },
+    { month: "2026-07", predicted: 27, actual: null, error: null, absError: null, percentError: null, riskLevel: "High", confidencePercent: 76, isCurrentMonth: true }
+  ],
+  summary: {
+    monthsTracked: 5,
+    meanAbsoluteError: 2.6,
+    meanAbsolutePercentError: 10.9,
+    accuracyScore: 89,
+    bestMonth: { month: "2026-04", predicted: 23, actual: 22, absError: 1 },
+    worstMonth: { month: "2026-05", predicted: 22, actual: 27, absError: 5 }
   }
 };
 
