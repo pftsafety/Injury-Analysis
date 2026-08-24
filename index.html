@@ -780,7 +780,31 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .emp-suggestion-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
 .emp-suggestion-count { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--red); background: var(--red-dim); padding: 2px 7px; border-radius: 20px; }
 
-/* Print styles */
+/* ── Zero First Aid Award ── */
+.award-dept-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+.award-dept-card { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; transition: box-shadow 0.2s; }
+.award-dept-card.award-eligible { background: var(--green-dim); border-color: rgba(5,150,105,0.25); }
+.award-dept-card:hover { box-shadow: var(--shadow-md); }
+.award-dept-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.award-dept-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.award-streak-bar { height: 6px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+.award-streak-fill { height: 100%; border-radius: 3px; background: var(--amber); transition: width 0.8s ease; }
+.award-streak-fill.eligible { background: var(--green); }
+
+/* Heatmap */
+.award-heatmap { min-width: 100%; }
+.award-heatmap-legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted2); margin-bottom: 10px; flex-wrap: wrap; }
+.award-heatmap-row { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.award-heatmap-row.header { font-size: 9px; font-weight: 700; color: var(--muted); border-bottom: 2px solid var(--border2); }
+.award-heatmap-label { width: 140px; min-width: 140px; padding: 6px 8px; font-size: 11px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.award-heatmap-cell { width: 28px; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; border-radius: 4px; margin: 2px; cursor: default; font-family: var(--font-mono); transition: transform 0.1s; }
+.award-heatmap-cell:hover { transform: scale(1.2); z-index: 10; position: relative; }
+.award-heatmap-cell.header { background: none; color: var(--muted); font-weight: 600; height: 34px; line-height: 1.2; }
+.award-heatmap-cell.zero { background: var(--green-dim); color: var(--green); }
+.award-heatmap-cell.fail { background: var(--red-dim); color: var(--red); }
+.award-heatmap-cell.current { background: var(--cyan-dim); color: var(--cyan); }
+.award-heatmap-cell.na { background: var(--border); color: var(--muted); }
+@media (max-width: 640px) { .award-dept-grid { grid-template-columns: 1fr; } .award-heatmap-label { width: 90px; min-width: 90px; } .award-heatmap-cell { width: 22px; min-width: 22px; height: 22px; font-size: 9px; } }
 #printOnlyHeader { display: none; }
 @media print {
   /* Hide all interactive chrome */
@@ -1226,6 +1250,15 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
         Hospital Reference
         <span class="nav-badge" id="hospitalBadge" style="display:none;background:var(--red-dim);color:var(--red)">0</span>
+      </button>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">Awards</div>
+      <button class="nav-btn" onclick="showView('award',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        Zero First Aid Award
+        <span class="nav-badge" id="awardBadge" style="display:none;background:var(--green-dim);color:var(--green)">✓</span>
       </button>
     </div>
 
@@ -2227,6 +2260,40 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
           <div>No hospital-referred cases found</div>
           <div style="font-size:11px;margin-top:5px" id="hospEmptyNote">Connect your Apps Script URL to see this data</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- ZERO FIRST AID AWARD                                    -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="view-award" class="view">
+
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Zero First Aid Award Scheme</div>
+            <div class="card-sub" id="awardPeriodLabel">Tracking from January 2024 · Departments are evaluated every month</div>
+          </div>
+        </div>
+
+        <!-- Summary KPIs -->
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="awardKpiRow"></div>
+
+        <!-- Cluster Cards -->
+        <div id="awardClusters"></div>
+
+        <!-- Month-by-month grid -->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Month-by-month first-aid heatmap</div>
+            <div class="card-sub">All departments across all tracked months — green = zero first-aid, red = has first-aid cases, grey = no data</div>
+          </div>
+          <div id="awardHeatmap" style="overflow-x:auto"></div>
+        </div>
+
+        <div class="empty-state" id="awardEmpty" style="display:none">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+          <div>No award data available</div>
+          <div style="font-size:11px;margin-top:5px">Connect your Apps Script URL to track the Zero First Aid Award scheme</div>
         </div>
       </div>
 
