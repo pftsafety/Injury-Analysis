@@ -171,7 +171,7 @@ let charts = {};
 let appData = {};
 
 // ── Nav ──────────────────────────────────────────────────────
-const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', prediction:'AI Prediction' };
+const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', award:'Zero First Aid Award', prediction:'AI Prediction' };
 
 function showView(id, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -244,14 +244,13 @@ async function loadAll() {
   }
 
   try {
-    const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred] = await Promise.all([
-      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary'), api('hospital_referred')
+    const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred, awardData] = await Promise.all([
+      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary'), api('hospital_referred'), api('zero_first_aid_award')
     ]);
-    // Clean up typo/case-fragmented categories (e.g. "Abrasion" vs "abrasion " vs "Abrasoin")
     stats.byBodyPart = clusterTally(stats.byBodyPart || {});
     injury.injuryTypes = clusterTally(injury.injuryTypes || {});
     injury.natures = clusterTally(injury.natures || {});
-    appData = { stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred };
+    appData = { stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred, awardData };
     renderAll();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
     loadPrediction();
@@ -333,7 +332,52 @@ function loadDemoData() {
       byGender: [['Male', 13], ['Female', 5]],
       monthly: monthly.slice(-30).map(m => ({ month: m.month, count: Math.max(0, Math.round(m.count * 0.08)) })),
       cases: []
-    }
+    },
+    awardData: (function() {
+      // Build realistic demo: some depts have long streaks, others break often
+      const now = new Date();
+      const months = [];
+      const cur = new Date(2024, 0, 1);
+      while (cur <= now) {
+        months.push(cur.getFullYear() + '-' + String(cur.getMonth()+1).padStart(2,'0'));
+        cur.setMonth(cur.getMonth()+1);
+      }
+      const currentMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+      function makeDeptStatus(dept, breakMonths) {
+        return months.map((m, i) => ({ month: m, firstAidCount: breakMonths.includes(i) ? 1 : 0, totalIncidents: breakMonths.includes(i) ? 2 : 1, zeroFirstAid: !breakMonths.includes(i), isCurrent: m === currentMonth }));
+      }
+      return {
+        generatedAt: new Date().toISOString(),
+        awardStartDate: 'Jan 2024',
+        currentMonth,
+        months,
+        totalAwardsCurrentlyEligible: 3,
+        clusters: {
+          'Cluster 1': {
+            label: 'Non-Production', rule: 'Zero first-aid cases for 3 consecutive months', streakRequired: 3,
+            departments: [
+              { department: 'QA', currentStreak: 4, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('QA', [1, 6]) },
+              { department: 'Stores', currentStreak: 1, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('Stores', [3, months.length-2]) },
+              { department: 'HR', currentStreak: months.length, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 5, awardMonths: [], longestStreak: months.length, monthStatus: makeDeptStatus('HR', []) },
+              { department: 'Finance', currentStreak: 2, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 2, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('Finance', [2, months.length-3]) },
+              { department: 'Purchase', currentStreak: 3, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 2, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('Purchase', [1, 5]) },
+              { department: 'MT & R&D Lab', currentStreak: 0, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('MT & R&D Lab', [2, 5, 8, months.length-1]) }
+            ],
+            clusterEligibleDepts: ['QA', 'HR', 'Purchase']
+          },
+          'Cluster 2': {
+            label: 'Production & Engineering', rule: 'Zero first-aid cases every month', streakRequired: 1,
+            departments: [
+              { department: 'Primary Production', currentStreak: 0, streakRequired: 1, isCurrentlyEligible: false, totalAwardsEarned: 8, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('Prod', [0,1,2,5,6,9,10,months.length-1]) },
+              { department: 'Packing', currentStreak: 0, streakRequired: 1, isCurrentlyEligible: false, totalAwardsEarned: 9, awardMonths: [], longestStreak: 2, monthStatus: makeDeptStatus('Packing', [0,2,3,6,7,10,months.length-1]) },
+              { department: 'ETD', currentStreak: 2, streakRequired: 1, isCurrentlyEligible: true, totalAwardsEarned: 14, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('ETD', [1,4,7,10]) },
+              { department: 'Engineering', currentStreak: 0, streakRequired: 1, isCurrentlyEligible: false, totalAwardsEarned: 10, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('Engineering', [0,3,4,7,8,months.length-1]) }
+            ],
+            clusterEligibleDepts: ['ETD']
+          }
+        }
+      };
+    })()
   };
   renderAll();
   document.getElementById('lastSync').textContent = 'Demo mode';
@@ -371,6 +415,7 @@ function renderAll() {
   initEmployeeSearch();
   renderWatchlistView();
   renderHospitalView();
+  renderAwardView();
 }
 
 // ── KPIs ─────────────────────────────────────────────────────
@@ -4013,6 +4058,164 @@ const DEMO_ACCURACY = {
     worstMonth: { month: "2026-05", predicted: 22, actual: 27, absError: 5 }
   }
 };
+
+// ── Zero First Aid Award View ──────────────────────────────────
+function renderAwardView() {
+  const data = appData.awardData;
+  const emptyState = document.getElementById('awardEmpty');
+  const badge = document.getElementById('awardBadge');
+
+  if (!data || !data.clusters) {
+    if (emptyState) emptyState.style.display = 'block';
+    if (badge) badge.style.display = 'none';
+    return;
+  }
+  if (emptyState) emptyState.style.display = 'none';
+
+  const eligible = data.totalAwardsCurrentlyEligible || 0;
+  if (badge) {
+    badge.style.display = eligible > 0 ? 'inline-flex' : 'none';
+    badge.textContent = eligible > 0 ? `${eligible} eligible` : '';
+  }
+
+  const periodLabel = document.getElementById('awardPeriodLabel');
+  if (periodLabel) periodLabel.textContent = `Tracking from ${data.awardStartDate} onwards · ${data.months ? data.months.length : 0} months recorded`;
+
+  renderAwardKpis(data);
+  renderAwardClusters(data);
+  renderAwardHeatmap(data);
+}
+
+function renderAwardKpis(data) {
+  const container = document.getElementById('awardKpiRow');
+  if (!container) return;
+
+  const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || []);
+  const eligible = allDepts.filter(d => d.isCurrentlyEligible);
+  const totalAwards = allDepts.reduce((s,d) => s + (d.totalAwardsEarned||0), 0);
+  const topStreak = allDepts.slice().sort((a,b) => b.longestStreak - a.longestStreak)[0];
+  const totalDepts = allDepts.length;
+
+  container.innerHTML = `
+    <div class="kpi-card c-green">
+      <div class="kpi-icon c-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></div>
+      <div class="kpi-label">Currently Eligible</div>
+      <div class="kpi-value" style="color:var(--green)">${eligible.length}<span style="font-size:14px;color:var(--muted)">/${totalDepts}</span></div>
+      <div class="kpi-sub">departments this month</div>
+    </div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+      <div class="kpi-label">Total Awards Earned</div>
+      <div class="kpi-value">${totalAwards}</div>
+      <div class="kpi-sub">across all departments</div>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="kpi-label">Longest Streak</div>
+      <div class="kpi-value">${topStreak ? topStreak.longestStreak : 0}<span style="font-size:13px;color:var(--muted)"> mo</span></div>
+      <div class="kpi-sub">${topStreak ? topStreak.department : '—'}</div>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div>
+      <div class="kpi-label">Months Tracked</div>
+      <div class="kpi-value">${data.months ? data.months.length : 0}</div>
+      <div class="kpi-sub">since ${data.awardStartDate}</div>
+    </div>
+  `;
+}
+
+function renderAwardClusters(data) {
+  const container = document.getElementById('awardClusters');
+  if (!container) return;
+
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  container.innerHTML = Object.entries(data.clusters || {}).map(([clusterName, cluster]) => {
+    const deptCards = (cluster.departments || []).map(dept => {
+      const eligible = dept.isCurrentlyEligible;
+      const streakPct = Math.min(100, Math.round((dept.currentStreak / dept.streakRequired) * 100));
+
+      return `
+        <div class="award-dept-card ${eligible ? 'award-eligible' : ''}">
+          <div class="award-dept-header">
+            <div class="award-dept-name">${dept.department}</div>
+            ${eligible
+              ? `<span class="badge badge-green">✓ Eligible</span>`
+              : `<span class="badge badge-muted">Streak: ${dept.currentStreak}/${dept.streakRequired}</span>`}
+          </div>
+          <div class="award-streak-bar">
+            <div class="award-streak-fill ${eligible ? 'eligible' : ''}" style="width:${streakPct}%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
+            <span>${dept.currentStreak} month${dept.currentStreak===1?'':'s'} current streak</span>
+            <span>Best: ${dept.longestStreak} mo · ${dept.totalAwardsEarned} award${dept.totalAwardsEarned===1?'':'s'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div class="card-title">${clusterName} — ${cluster.label}</div>
+            <div class="card-sub">${cluster.rule}</div>
+          </div>
+          ${cluster.clusterEligibleDepts && cluster.clusterEligibleDepts.length
+            ? `<div style="font-size:11px;font-weight:600;color:var(--green)">✓ ${cluster.clusterEligibleDepts.join(', ')} eligible this month</div>`
+            : `<div style="font-size:11px;color:var(--muted)">No departments eligible this month</div>`}
+        </div>
+        <div class="award-dept-grid">${deptCards}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAwardHeatmap(data) {
+  const container = document.getElementById('awardHeatmap');
+  if (!container) return;
+
+  const months = data.months || [];
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || []);
+
+  const headerRow = `<div class="award-heatmap-row header">
+    <div class="award-heatmap-label">Department</div>
+    ${months.map(m => {
+      const [y, mm] = m.split('-');
+      return `<div class="award-heatmap-cell header" title="${MONTH_SHORT[+mm-1]} ${y}">${MONTH_SHORT[+mm-1].charAt(0)}<br><span style="font-size:8px">${y.slice(2)}</span></div>`;
+    }).join('')}
+  </div>`;
+
+  const deptRows = allDepts.map(dept => {
+    const statusMap = {};
+    (dept.monthStatus || []).forEach(ms => { statusMap[ms.month] = ms; });
+    const cells = months.map(m => {
+      const ms = statusMap[m];
+      if (!ms) return `<div class="award-heatmap-cell na" title="${m}: No data">–</div>`;
+      if (ms.isCurrent) return `<div class="award-heatmap-cell current" title="${m}: Current month (in progress)">${ms.firstAidCount}</div>`;
+      if (ms.zeroFirstAid) return `<div class="award-heatmap-cell zero" title="${m}: ✓ Zero first-aid (${ms.totalIncidents} total incidents)">0</div>`;
+      return `<div class="award-heatmap-cell fail" title="${m}: ${ms.firstAidCount} first-aid case(s)">${ms.firstAidCount}</div>`;
+    }).join('');
+    return `<div class="award-heatmap-row">
+      <div class="award-heatmap-label" title="${dept.department}">${dept.department}</div>
+      ${cells}
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="award-heatmap">
+      <div class="award-heatmap-legend">
+        <span class="award-heatmap-cell zero" style="display:inline-block;width:20px;height:20px;margin-right:4px">0</span> Zero first-aid &nbsp;
+        <span class="award-heatmap-cell fail" style="display:inline-block;width:20px;height:20px;margin-right:4px">1</span> Has first-aid cases &nbsp;
+        <span class="award-heatmap-cell current" style="display:inline-block;width:20px;height:20px;margin-right:4px">~</span> Current month &nbsp;
+        <span class="award-heatmap-cell na" style="display:inline-block;width:20px;height:20px;margin-right:4px">–</span> No data
+      </div>
+      ${headerRow}
+      ${deptRows}
+    </div>
+  `;
+}
 
 // ── Init ──────────────────────────────────────────────────────
 loadAll();
