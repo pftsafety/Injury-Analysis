@@ -4206,8 +4206,8 @@ function renderAwardHeatmap(data) {
   container.innerHTML = `
     <div class="award-heatmap">
       <div class="award-heatmap-legend">
-        <span class="award-heatmap-cell zero" style="display:inline-block;width:20px;height:20px;margin-right:4px">0</span> Zero first-aid &nbsp;
-        <span class="award-heatmap-cell fail" style="display:inline-block;width:20px;height:20px;margin-right:4px">1</span> Has first-aid cases &nbsp;
+        <span class="award-heatmap-cell zero" style="display:inline-block;width:20px;height:20px;margin-right:4px">0</span> Zero incidents &nbsp;
+        <span class="award-heatmap-cell fail" style="display:inline-block;width:20px;height:20px;margin-right:4px">1</span> Has incidents &nbsp;
         <span class="award-heatmap-cell current" style="display:inline-block;width:20px;height:20px;margin-right:4px">~</span> Current month &nbsp;
         <span class="award-heatmap-cell na" style="display:inline-block;width:20px;height:20px;margin-right:4px">–</span> No data
       </div>
