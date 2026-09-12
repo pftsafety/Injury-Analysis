@@ -2268,24 +2268,72 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
       <!-- ═══════════════════════════════════════════════════════ -->
       <div id="view-award" class="view">
 
-        <div class="chart-card" style="margin-bottom:16px">
-          <div class="card-header">
-            <div class="card-title">Zero First Aid Award Scheme</div>
-            <div class="card-sub" id="awardPeriodLabel">Tracking from January 2024 · Departments are evaluated every month</div>
+        <div class="chart-card no-clip" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div>
+              <div class="card-title">Zero First Aid Award Scheme</div>
+              <div class="card-sub" id="awardPeriodLabel">Tracking from January 2024 · Departments are evaluated every month</div>
+            </div>
           </div>
+
+          <!-- Filter row -->
+          <div class="explorer-filter-row" style="margin-top:14px">
+            <div class="explorer-filter-group">
+              <label class="explorer-filter-label">From month</label>
+              <select id="awardFromMonth" class="year-select" onchange="applyAwardFilters()">
+                <option value="">All time</option>
+              </select>
+            </div>
+            <div class="explorer-filter-group">
+              <label class="explorer-filter-label">To month</label>
+              <select id="awardToMonth" class="year-select" onchange="applyAwardFilters()">
+                <option value="">Present</option>
+              </select>
+            </div>
+            <div class="explorer-filter-group">
+              <label class="explorer-filter-label">Department</label>
+              <select id="awardDeptFilter" class="year-select" onchange="applyAwardFilters()">
+                <option value="">All departments</option>
+              </select>
+            </div>
+            <div class="explorer-filter-group">
+              <label class="explorer-filter-label">View</label>
+              <select id="awardViewMode" class="year-select" onchange="applyAwardFilters()">
+                <option value="dept">By Department</option>
+                <option value="section">By Section</option>
+              </select>
+            </div>
+            <button class="btn-refresh" style="align-self:flex-end" onclick="resetAwardFilters()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Reset
+            </button>
+          </div>
+          <div class="explorer-active-chips" id="awardFilterChips"></div>
         </div>
 
         <!-- Summary KPIs -->
         <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="awardKpiRow"></div>
 
-        <!-- Cluster Cards -->
+        <!-- Cluster Cards (dept view only) -->
         <div id="awardClusters"></div>
 
-        <!-- Month-by-month grid -->
+        <!-- Month-by-month heatmap -->
         <div class="chart-card" style="margin-bottom:16px">
-          <div class="card-header">
-            <div class="card-title">Month-by-month first-aid heatmap</div>
-            <div class="card-sub">All departments across all tracked months — green = zero incidents, red = has incidents, grey = no data</div>
+          <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div>
+              <div class="card-title" id="awardHeatmapTitle">Month-by-month heatmap</div>
+              <div class="card-sub" id="awardHeatmapSub">Green = zero incidents, red = has incidents, grey = no data</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn-export" onclick="exportAwardExcel()" title="Export filtered data to Excel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Excel
+              </button>
+              <button class="btn-export btn-export-pdf" onclick="printAwardPdf()" title="Print / Save as PDF">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Print / PDF
+              </button>
+            </div>
           </div>
           <div id="awardHeatmap" style="overflow-x:auto"></div>
         </div>
