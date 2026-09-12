@@ -353,20 +353,27 @@ function loadDemoData() {
         months,
         totalAwardsCurrentlyEligible: 3,
         clusters: {
-          'Cluster 1': {
-            label: 'Non-Production', rule: 'Zero first-aid cases for 3 consecutive months', streakRequired: 3,
+          'Cluster 1A': {
+            label: 'Non-Production — Group A', rule: 'Zero incidents for 3 consecutive months', streakRequired: 3,
             departments: [
-              { department: 'QA', currentStreak: 4, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('QA', [1, 6]) },
+              { department: 'MT & R&D Lab', currentStreak: 0, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('MT & R&D Lab', [2, 5, 8, months.length-1]) },
+              { department: 'QA', currentStreak: 4, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('QA', [1, 6]) }
+            ],
+            clusterEligibleDepts: ['QA']
+          },
+          'Cluster 1B': {
+            label: 'Non-Production — Group B', rule: 'Zero incidents for 3 consecutive months', streakRequired: 3,
+            departments: [
               { department: 'Stores', currentStreak: 1, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('Stores', [3, months.length-2]) },
               { department: 'HR', currentStreak: months.length, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 5, awardMonths: [], longestStreak: months.length, monthStatus: makeDeptStatus('HR', []) },
               { department: 'Finance', currentStreak: 2, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 2, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('Finance', [2, months.length-3]) },
               { department: 'Purchase', currentStreak: 3, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 2, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('Purchase', [1, 5]) },
-              { department: 'MT & R&D Lab', currentStreak: 0, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('MT & R&D Lab', [2, 5, 8, months.length-1]) }
+              { department: 'Administration', currentStreak: 5, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 7, monthStatus: makeDeptStatus('Administration', [1, 8]) }
             ],
-            clusterEligibleDepts: ['QA', 'HR', 'Purchase']
+            clusterEligibleDepts: ['HR', 'Purchase', 'Administration']
           },
           'Cluster 2': {
-            label: 'Production & Engineering', rule: 'Zero first-aid cases every month', streakRequired: 1,
+            label: 'Production & Engineering', rule: 'Zero incidents every month', streakRequired: 1,
             departments: [
               { department: 'Primary Production', currentStreak: 0, streakRequired: 1, isCurrentlyEligible: false, totalAwardsEarned: 8, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('Prod', [0,1,2,5,6,9,10,months.length-1]) },
               { department: 'Packing', currentStreak: 0, streakRequired: 1, isCurrentlyEligible: false, totalAwardsEarned: 9, awardMonths: [], longestStreak: 2, monthStatus: makeDeptStatus('Packing', [0,2,3,6,7,10,months.length-1]) },
@@ -2847,6 +2854,27 @@ function renderPrediction(p, cachedAt) {
       `).join('')}
     </div>` : ''}
 
+    ${appData.awardData?.clusters ? `
+    <div class="section-header"><div class="section-title">Zero first aid award status</div></div>
+    ${prev.awardInsight ? `<div class="review-insight-text" style="margin-bottom:12px">${prev.awardInsight}</div>` : ''}
+    ${(() => {
+      const allDepts = Object.values(appData.awardData.clusters).flatMap(c => c.departments || []);
+      const eligible = allDepts.filter(d => d.isCurrentlyEligible);
+      const close = allDepts.filter(d => !d.isCurrentlyEligible && d.streakRequired > 1 && d.currentStreak === d.streakRequired - 1);
+      return `
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--green);margin-bottom:6px">Currently Eligible</div>
+        <div class="dept-tags" style="margin-bottom:${close.length ? '14px' : '4px'}">
+          ${eligible.length ? eligible.map(d => `<span class="dept-tag" style="background:var(--green-dim);color:var(--green)">✓ ${d.department}</span>`).join('') : '<span style="font-size:12px;color:var(--muted)">No departments currently eligible</span>'}
+        </div>
+        ${close.length ? `
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--amber);margin-bottom:6px">One Month Away</div>
+        <div class="dept-tags">
+          ${close.map(d => `<span class="dept-tag" style="background:var(--amber-dim);color:var(--amber)">${d.department} (${d.currentStreak}/${d.streakRequired} mo)</span>`).join('')}
+        </div>` : ''}
+      `;
+    })()}
+    ` : ''}
+
     <div class="section-header"><div class="section-title">Root cause themes</div></div>
     ${(prev.rootCauseThemes || []).map(r => `
       <div class="root-cause-item">
@@ -2995,6 +3023,7 @@ const DEMO_PREDICTION = {
       insight: "Male workers accounted for 71% of incidents, concentrated in Primary Production and Engineering where physical handling tasks dominate. Female incidents clustered in Packing, mostly minor abrasions from repetitive material handling."
     },
     bodyPartInsight: "Hands and fingers accounted for over 40% of all injuries this month, consistent with the facility's historical pattern — manual handling of foil rolls, crates, and drilling equipment remains the primary ergonomic risk driver.",
+    awardInsight: "HR extended its zero-incident streak past the full tracked period, and Purchase just crossed the 3-month threshold to become newly eligible. ETD broke its streak this month after 4 consecutive clean months — worth a quick check-in with that team.",
     severityAssessment: {
       level: "Moderate",
       rationale: "No lost-time injuries or fractures recorded; the injury mix was dominated by abrasions and pain/swelling, which are lower-severity but high-frequency categories."
@@ -4059,7 +4088,9 @@ const DEMO_ACCURACY = {
   }
 };
 
-// ── Zero First Aid Award View ──────────────────────────────────
+// ── Zero First Aid Award — Filter State ───────────────────────
+let awardFilterState = { fromMonth: '', toMonth: '', dept: '', viewMode: 'dept' };
+
 function renderAwardView() {
   const data = appData.awardData;
   const emptyState = document.getElementById('awardEmpty');
@@ -4081,140 +4112,446 @@ function renderAwardView() {
   const periodLabel = document.getElementById('awardPeriodLabel');
   if (periodLabel) periodLabel.textContent = `Tracking from ${data.awardStartDate} onwards · ${data.months ? data.months.length : 0} months recorded`;
 
-  renderAwardKpis(data);
-  renderAwardClusters(data);
-  renderAwardHeatmap(data);
+  populateAwardFilters(data);
+  applyAwardFilters();
 }
 
-function renderAwardKpis(data) {
+function populateAwardFilters(data) {
+  const months = data.months || [];
+  const optionsHtml = months.map(m => {
+    const [y, mm] = m.split('-');
+    return `<option value="${m}">${MONTH_NAMES[+mm-1]} ${y}</option>`;
+  }).join('');
+
+  const fromSel = document.getElementById('awardFromMonth');
+  const toSel = document.getElementById('awardToMonth');
+  if (fromSel) fromSel.innerHTML = `<option value="">All time</option>` + optionsHtml;
+  if (toSel) toSel.innerHTML = `<option value="">Present</option>` + optionsHtml;
+
+  const allDepts = Object.values(data.clusters).flatMap(c => (c.departments || []).map(d => d.department));
+  const deptSel = document.getElementById('awardDeptFilter');
+  if (deptSel) {
+    deptSel.innerHTML = `<option value="">All departments</option>` +
+      allDepts.map(d => `<option value="${d}">${d}</option>`).join('');
+  }
+}
+
+function applyAwardFilters() {
+  const data = appData.awardData;
+  if (!data) return;
+
+  awardFilterState.fromMonth = document.getElementById('awardFromMonth')?.value || '';
+  awardFilterState.toMonth   = document.getElementById('awardToMonth')?.value || '';
+  awardFilterState.dept      = document.getElementById('awardDeptFilter')?.value || '';
+  awardFilterState.viewMode  = document.getElementById('awardViewMode')?.value || 'dept';
+
+  // Compute filtered month list
+  const allMonths = data.months || [];
+  const filteredMonths = allMonths.filter(m => {
+    if (awardFilterState.fromMonth && m < awardFilterState.fromMonth) return false;
+    if (awardFilterState.toMonth   && m > awardFilterState.toMonth)   return false;
+    return true;
+  });
+
+  updateAwardFilterChips(filteredMonths, allMonths);
+  renderAwardKpis(data, filteredMonths);
+  renderAwardClusters(data, filteredMonths);
+  renderAwardHeatmap(data, filteredMonths);
+}
+
+function resetAwardFilters() {
+  const fromSel = document.getElementById('awardFromMonth');
+  const toSel   = document.getElementById('awardToMonth');
+  const deptSel = document.getElementById('awardDeptFilter');
+  const modeSel = document.getElementById('awardViewMode');
+  if (fromSel) fromSel.value = '';
+  if (toSel)   toSel.value   = '';
+  if (deptSel) deptSel.value = '';
+  if (modeSel) modeSel.value = 'dept';
+  awardFilterState = { fromMonth: '', toMonth: '', dept: '', viewMode: 'dept' };
+  applyAwardFilters();
+}
+
+function updateAwardFilterChips(filteredMonths, allMonths) {
+  const container = document.getElementById('awardFilterChips');
+  if (!container) return;
+  const chips = [];
+  if (awardFilterState.fromMonth || awardFilterState.toMonth) {
+    const fromLabel = awardFilterState.fromMonth
+      ? MONTH_NAMES[+awardFilterState.fromMonth.split('-')[1]-1] + ' ' + awardFilterState.fromMonth.split('-')[0]
+      : 'All time';
+    const toLabel = awardFilterState.toMonth
+      ? MONTH_NAMES[+awardFilterState.toMonth.split('-')[1]-1] + ' ' + awardFilterState.toMonth.split('-')[0]
+      : 'Present';
+    chips.push(`Period: ${fromLabel} → ${toLabel} (${filteredMonths.length} month${filteredMonths.length===1?'':'s'})`);
+  }
+  if (awardFilterState.dept) chips.push(`Dept: ${awardFilterState.dept}`);
+  if (awardFilterState.viewMode === 'section') chips.push('View: By Section');
+  container.innerHTML = chips.length
+    ? chips.map(c => `<span class="filter-chip">${c}</span>`).join('')
+    : `<span class="filter-chip dim">Showing all data — no filters applied</span>`;
+}
+
+function renderAwardKpis(data, filteredMonths) {
   const container = document.getElementById('awardKpiRow');
   if (!container) return;
 
   const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || []);
-  const eligible = allDepts.filter(d => d.isCurrentlyEligible);
-  const totalAwards = allDepts.reduce((s,d) => s + (d.totalAwardsEarned||0), 0);
-  const topStreak = allDepts.slice().sort((a,b) => b.longestStreak - a.longestStreak)[0];
-  const totalDepts = allDepts.length;
+  const deptFilter = awardFilterState.dept;
+  const visibleDepts = deptFilter ? allDepts.filter(d => d.department === deptFilter) : allDepts;
+
+  const zeroMonths = visibleDepts.reduce((s, dept) => {
+    return s + (dept.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent && ms.zeroFirstAid).length;
+  }, 0);
+  const totalMonths = visibleDepts.reduce((s, dept) => {
+    return s + (dept.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent).length;
+  }, 0);
+  const eligible = visibleDepts.filter(d => d.isCurrentlyEligible).length;
+  const topStreak = visibleDepts.slice().sort((a,b) => b.longestStreak - a.longestStreak)[0];
+
+  const zeroPct = totalMonths ? Math.round((zeroMonths / totalMonths) * 100) : 0;
 
   container.innerHTML = `
     <div class="kpi-card c-green">
       <div class="kpi-icon c-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></div>
       <div class="kpi-label">Currently Eligible</div>
-      <div class="kpi-value" style="color:var(--green)">${eligible.length}<span style="font-size:14px;color:var(--muted)">/${totalDepts}</span></div>
+      <div class="kpi-value" style="color:var(--green)">${eligible}<span style="font-size:14px;color:var(--muted)">/${visibleDepts.length}</span></div>
       <div class="kpi-sub">departments this month</div>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="kpi-label">Zero-Incident Months</div>
+      <div class="kpi-value">${zeroMonths}<span style="font-size:14px;color:var(--muted)">/${totalMonths}</span></div>
+      <div class="kpi-sub">${zeroPct}% of dept-months in period</div>
     </div>
     <div class="kpi-card c-amber">
       <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
-      <div class="kpi-label">Total Awards Earned</div>
-      <div class="kpi-value">${totalAwards}</div>
-      <div class="kpi-sub">across all departments</div>
+      <div class="kpi-label">Period Covered</div>
+      <div class="kpi-value">${filteredMonths.length}</div>
+      <div class="kpi-sub">month${filteredMonths.length===1?'':'s'} in view</div>
     </div>
-    <div class="kpi-card c-cyan">
-      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
       <div class="kpi-label">Longest Streak</div>
       <div class="kpi-value">${topStreak ? topStreak.longestStreak : 0}<span style="font-size:13px;color:var(--muted)"> mo</span></div>
       <div class="kpi-sub">${topStreak ? topStreak.department : '—'}</div>
     </div>
-    <div class="kpi-card c-purple">
-      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div>
-      <div class="kpi-label">Months Tracked</div>
-      <div class="kpi-value">${data.months ? data.months.length : 0}</div>
-      <div class="kpi-sub">since ${data.awardStartDate}</div>
-    </div>
   `;
 }
 
-function renderAwardClusters(data) {
+function renderAwardClusters(data, filteredMonths) {
   const container = document.getElementById('awardClusters');
   if (!container) return;
 
-  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // In section view or when a specific dept is selected, hide cluster cards (heatmap is more useful)
+  if (awardFilterState.viewMode === 'section' || awardFilterState.dept) {
+    container.innerHTML = '';
+    return;
+  }
 
-  container.innerHTML = Object.entries(data.clusters || {}).map(([clusterName, cluster]) => {
-    const deptCards = (cluster.departments || []).map(dept => {
-      const eligible = dept.isCurrentlyEligible;
-      const streakPct = Math.min(100, Math.round((dept.currentStreak / dept.streakRequired) * 100));
+  const clusters = data.clusters || {};
+  const cluster1A = clusters['Cluster 1A'];
+  const cluster1B = clusters['Cluster 1B'];
+  const cluster2  = clusters['Cluster 2'];
 
+  function deptCardsHtml(cluster) {
+    return (cluster.departments || []).map(dept => {
+      // Recalculate streak based on filtered months only
+      const completedFiltered = (dept.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent);
+      let streak = 0;
+      for (let i = completedFiltered.length - 1; i >= 0; i--) {
+        if (completedFiltered[i].zeroFirstAid) streak++;
+        else break;
+      }
+      const eligible = streak >= dept.streakRequired;
+      const streakPct = Math.min(100, Math.round((streak / dept.streakRequired) * 100));
       return `
         <div class="award-dept-card ${eligible ? 'award-eligible' : ''}">
           <div class="award-dept-header">
             <div class="award-dept-name">${dept.department}</div>
             ${eligible
               ? `<span class="badge badge-green">✓ Eligible</span>`
-              : `<span class="badge badge-muted">Streak: ${dept.currentStreak}/${dept.streakRequired}</span>`}
+              : `<span class="badge badge-muted">Streak: ${streak}/${dept.streakRequired}</span>`}
           </div>
           <div class="award-streak-bar">
             <div class="award-streak-fill ${eligible ? 'eligible' : ''}" style="width:${streakPct}%"></div>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
-            <span>${dept.currentStreak} month${dept.currentStreak===1?'':'s'} current streak</span>
+            <span>${streak} month${streak===1?'':'s'} current streak</span>
             <span>Best: ${dept.longestStreak} mo · ${dept.totalAwardsEarned} award${dept.totalAwardsEarned===1?'':'s'}</span>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
+  }
 
-    return `
-      <div class="chart-card" style="margin-bottom:16px">
-        <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
-          <div>
-            <div class="card-title">${clusterName} — ${cluster.label}</div>
-            <div class="card-sub">${cluster.rule}</div>
-          </div>
-          ${cluster.clusterEligibleDepts && cluster.clusterEligibleDepts.length
-            ? `<div style="font-size:11px;font-weight:600;color:var(--green)">✓ ${cluster.clusterEligibleDepts.join(', ')} eligible this month</div>`
-            : `<div style="font-size:11px;color:var(--muted)">No departments eligible this month</div>`}
-        </div>
-        <div class="award-dept-grid">${deptCards}</div>
+  function eligibleLine(cluster) {
+    const currentlyEligible = (cluster.departments || []).filter(d => {
+      const completed = (d.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent);
+      let streak = 0;
+      for (let i = completed.length - 1; i >= 0; i--) {
+        if (completed[i].zeroFirstAid) streak++;
+        else break;
+      }
+      return streak >= d.streakRequired;
+    }).map(d => d.department);
+    return currentlyEligible.length
+      ? `<div style="font-size:11px;font-weight:600;color:var(--green);margin-top:4px">✓ ${currentlyEligible.join(', ')} eligible</div>`
+      : `<div style="font-size:11px;color:var(--muted);margin-top:4px">No departments eligible in this period</div>`;
+  }
+
+  let html = '';
+  if (cluster1A || cluster1B) {
+    const rule1 = (cluster1A || cluster1B).rule;
+    html += `<div class="chart-card" style="margin-bottom:16px">
+      <div class="card-header"><div class="card-title">Cluster 1 — Non-Production</div><div class="card-sub">${rule1}</div></div>
+      ${cluster1A ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:16px 0 8px">Group A — MT &amp; R&amp;D Lab, QA</div>${eligibleLine(cluster1A)}<div class="award-dept-grid">${deptCardsHtml(cluster1A)}</div>` : ''}
+      ${cluster1B ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--border)">Group B — Stores, HR, Finance, Purchase, Administration</div>${eligibleLine(cluster1B)}<div class="award-dept-grid">${deptCardsHtml(cluster1B)}</div>` : ''}
+    </div>`;
+  }
+  if (cluster2) {
+    html += `<div class="chart-card" style="margin-bottom:16px">
+      <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div><div class="card-title">Cluster 2 — ${cluster2.label}</div><div class="card-sub">${cluster2.rule}</div></div>
+        ${eligibleLine(cluster2)}
       </div>
-    `;
-  }).join('');
+      <div class="award-dept-grid">${deptCardsHtml(cluster2)}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
 }
 
-function renderAwardHeatmap(data) {
+function renderAwardHeatmap(data, filteredMonths) {
   const container = document.getElementById('awardHeatmap');
+  const titleEl = document.getElementById('awardHeatmapTitle');
+  const subEl = document.getElementById('awardHeatmapSub');
   if (!container) return;
 
-  const months = data.months || [];
-  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const viewMode = awardFilterState.viewMode;
+  const deptFilter = awardFilterState.dept;
+
+  if (viewMode === 'section') {
+    if (titleEl) titleEl.textContent = 'Month-by-month heatmap — By Section';
+    if (subEl) subEl.textContent = `Sections ${deptFilter ? 'in ' + deptFilter : 'across all departments'} — green = zero incidents, red = has incidents`;
+    renderAwardHeatmapGrid(container, buildSectionRows(data, filteredMonths, deptFilter));
+  } else {
+    if (titleEl) titleEl.textContent = 'Month-by-month heatmap — By Department';
+    if (subEl) subEl.textContent = `${deptFilter ? deptFilter + ' only' : 'All departments'} — green = zero incidents, red = has incidents`;
+    renderAwardHeatmapGrid(container, buildDeptRows(data, filteredMonths, deptFilter));
+  }
+}
+
+function buildDeptRows(data, filteredMonths, deptFilter) {
   const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || []);
+  return allDepts
+    .filter(d => !deptFilter || d.department === deptFilter)
+    .map(dept => {
+      const statusMap = {};
+      (dept.monthStatus || []).forEach(ms => { statusMap[ms.month] = ms; });
+      return {
+        label: dept.department,
+        cells: filteredMonths.map(m => statusMap[m] || { month: m, firstAidCount: null, zeroFirstAid: null, isCurrent: false })
+      };
+    });
+}
+
+function buildSectionRows(data, filteredMonths, deptFilter) {
+  const sections = data.sections || {};
+  return Object.entries(sections)
+    .filter(([, s]) => !deptFilter || s.dept === deptFilter)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([section, s]) => {
+      const statusMap = {};
+      (s.monthStatus || []).forEach(ms => { statusMap[ms.month] = ms; });
+      return {
+        label: section,
+        sublabel: s.dept,
+        cells: filteredMonths.map(m => {
+          const ms = statusMap[m];
+          return ms || { month: m, count: null, zero: null, isCurrent: false };
+        })
+      };
+    });
+}
+
+function renderAwardHeatmapGrid(container, rows) {
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   const headerRow = `<div class="award-heatmap-row header">
-    <div class="award-heatmap-label">Department</div>
-    ${months.map(m => {
-      const [y, mm] = m.split('-');
+    <div class="award-heatmap-label">Name</div>
+    ${rows[0] ? rows[0].cells.map(cell => {
+      const [y, mm] = cell.month.split('-');
       return `<div class="award-heatmap-cell header" title="${MONTH_SHORT[+mm-1]} ${y}">${MONTH_SHORT[+mm-1].charAt(0)}<br><span style="font-size:8px">${y.slice(2)}</span></div>`;
-    }).join('')}
+    }).join('') : ''}
   </div>`;
 
-  const deptRows = allDepts.map(dept => {
-    const statusMap = {};
-    (dept.monthStatus || []).forEach(ms => { statusMap[ms.month] = ms; });
-    const cells = months.map(m => {
-      const ms = statusMap[m];
-      if (!ms) return `<div class="award-heatmap-cell na" title="${m}: No data">–</div>`;
-      if (ms.isCurrent) return `<div class="award-heatmap-cell current" title="${m}: Current month (in progress)">${ms.firstAidCount}</div>`;
-      if (ms.zeroFirstAid) return `<div class="award-heatmap-cell zero" title="${m}: ✓ Zero first-aid (${ms.totalIncidents} total incidents)">0</div>`;
-      return `<div class="award-heatmap-cell fail" title="${m}: ${ms.firstAidCount} first-aid case(s)">${ms.firstAidCount}</div>`;
+  const dataRows = rows.map(row => {
+    const cells = row.cells.map(ms => {
+      const count = ms.firstAidCount ?? ms.count;
+      if (count === null || count === undefined) return `<div class="award-heatmap-cell na" title="${ms.month}: No data">–</div>`;
+      if (ms.isCurrent) return `<div class="award-heatmap-cell current" title="${ms.month}: Current month">${count}</div>`;
+      if (ms.zeroFirstAid ?? ms.zero) return `<div class="award-heatmap-cell zero" title="${ms.month}: ✓ Zero incidents">0</div>`;
+      return `<div class="award-heatmap-cell fail" title="${ms.month}: ${count} incident(s)">${count}</div>`;
     }).join('');
     return `<div class="award-heatmap-row">
-      <div class="award-heatmap-label" title="${dept.department}">${dept.department}</div>
+      <div class="award-heatmap-label" title="${row.label}">
+        ${row.label}${row.sublabel ? `<br><span style="font-size:9px;color:var(--muted)">${row.sublabel}</span>` : ''}
+      </div>
       ${cells}
     </div>`;
   }).join('');
 
-  container.innerHTML = `
-    <div class="award-heatmap">
-      <div class="award-heatmap-legend">
-        <span class="award-heatmap-cell zero" style="display:inline-block;width:20px;height:20px;margin-right:4px">0</span> Zero incidents &nbsp;
-        <span class="award-heatmap-cell fail" style="display:inline-block;width:20px;height:20px;margin-right:4px">1</span> Has incidents &nbsp;
-        <span class="award-heatmap-cell current" style="display:inline-block;width:20px;height:20px;margin-right:4px">~</span> Current month &nbsp;
-        <span class="award-heatmap-cell na" style="display:inline-block;width:20px;height:20px;margin-right:4px">–</span> No data
-      </div>
-      ${headerRow}
-      ${deptRows}
+  container.innerHTML = `<div class="award-heatmap">
+    <div class="award-heatmap-legend">
+      <span class="award-heatmap-cell zero" style="display:inline-block;width:20px;height:20px;margin-right:4px">0</span> Zero incidents &nbsp;
+      <span class="award-heatmap-cell fail" style="display:inline-block;width:20px;height:20px;margin-right:4px">1</span> Has incidents &nbsp;
+      <span class="award-heatmap-cell current" style="display:inline-block;width:20px;height:20px;margin-right:4px">~</span> Current month &nbsp;
+      <span class="award-heatmap-cell na" style="display:inline-block;width:20px;height:20px;margin-right:4px">–</span> No data
     </div>
-  `;
+    ${headerRow}${dataRows}
+  </div>`;
+}
+
+// ── Award Export: Excel ──────────────────────────────────────
+function exportAwardExcel() {
+  const data = appData.awardData;
+  if (!data) { alert('No award data to export.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded. Please refresh.'); return; }
+
+  const rawRows = data.rawRows || [];
+  const fromMonth = awardFilterState.fromMonth;
+  const toMonth   = awardFilterState.toMonth;
+  const deptFilter = awardFilterState.dept;
+
+  const filtered = rawRows.filter(r => {
+    if (fromMonth && r.month < fromMonth) return false;
+    if (toMonth   && r.month > toMonth)   return false;
+    if (deptFilter && r.dept !== deptFilter) return false;
+    return true;
+  });
+
+  if (!filtered.length) { alert('No incidents in the current filter selection.'); return; }
+
+  const rows = filtered.map(r => ({
+    'Date': r.date,
+    'Year': r.year,
+    'Month': r.month,
+    'Card No': r.cardNo,
+    'Name': r.name,
+    'Department': r.dept,
+    'Section': r.section,
+    'Type of Injury': r.injuryType,
+    'Nature of Incident': r.nature,
+    'Affected Part': r.bodyPart,
+    'Description': r.description
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:6},{wch:8},{wch:10},{wch:18},{wch:18},{wch:16},{wch:16},{wch:20},{wch:14},{wch:40}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Award Incidents');
+
+  // Second sheet: zero-incident summary
+  const allMonths = (data.months || []).filter(m => {
+    if (fromMonth && m < fromMonth) return false;
+    if (toMonth   && m > toMonth)   return false;
+    return true;
+  });
+  const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || [])
+    .filter(d => !deptFilter || d.department === deptFilter);
+
+  const summaryRows = [];
+  allDepts.forEach(dept => {
+    allMonths.forEach(m => {
+      const ms = (dept.monthStatus || []).find(s => s.month === m);
+      if (!ms) return;
+      summaryRows.push({
+        'Department': dept.department,
+        'Month': m,
+        'Incidents': ms.firstAidCount,
+        'Zero Incident Month': ms.zeroFirstAid ? 'Yes' : 'No',
+        'In Progress': ms.isCurrent ? 'Yes' : 'No'
+      });
+    });
+  });
+
+  if (summaryRows.length) {
+    const ws2 = XLSX.utils.json_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Monthly Summary');
+  }
+
+  const dateTag = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `SHE_ZeroFirstAid_Award_${dateTag}.xlsx`);
+}
+
+// ── Award Export: Print / PDF ────────────────────────────────
+function printAwardPdf() {
+  const data = appData.awardData;
+  if (!data) { alert('No award data to print.'); return; }
+
+  const fromMonth = awardFilterState.fromMonth;
+  const toMonth   = awardFilterState.toMonth;
+  const deptFilter = awardFilterState.dept;
+  const viewMode  = awardFilterState.viewMode;
+
+  const filteredMonths = (data.months || []).filter(m => {
+    if (fromMonth && m < fromMonth) return false;
+    if (toMonth   && m > toMonth)   return false;
+    return true;
+  });
+
+  const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const rows = viewMode === 'section'
+    ? buildSectionRows(data, filteredMonths, deptFilter)
+    : buildDeptRows(data, filteredMonths, deptFilter);
+
+  const headerCells = filteredMonths.map(m => {
+    const [y, mm] = m.split('-');
+    return `<th>${MONTH_SHORT[+mm-1]}<br><span style="font-weight:400;font-size:8px">${y.slice(2)}</span></th>`;
+  }).join('');
+
+  const tableRows = rows.map(row => {
+    const cells = row.cells.map(ms => {
+      const count = ms.firstAidCount ?? ms.count;
+      if (count === null || count === undefined) return `<td style="background:#f1f5f9;color:#94a3b8">–</td>`;
+      if (ms.isCurrent) return `<td style="background:#eff6ff;color:#2563eb">${count}</td>`;
+      if (ms.zeroFirstAid ?? ms.zero) return `<td style="background:#d1fae5;color:#065f46">0</td>`;
+      return `<td style="background:#fee2e2;color:#991b1b">${count}</td>`;
+    }).join('');
+    return `<tr><td style="font-weight:600;white-space:nowrap">${row.label}${row.sublabel ? `<br><span style="font-weight:400;font-size:9px;color:#64748b">${row.sublabel}</span>` : ''}</td>${cells}</tr>`;
+  }).join('');
+
+  const filterDesc = [
+    fromMonth || toMonth ? `Period: ${fromMonth || 'All time'} → ${toMonth || 'Present'}` : null,
+    deptFilter ? `Department: ${deptFilter}` : null,
+    `View: By ${viewMode === 'section' ? 'Section' : 'Department'}`
+  ].filter(Boolean).join(' · ');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { alert('Please allow popups to use Print / PDF export.'); return; }
+
+  printWindow.document.write(`<!DOCTYPE html><html><head><title>Zero First Aid Award</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; color: #0f172a; }
+    h1 { font-size: 16px; margin-bottom: 4px; }
+    .sub { font-size: 10px; color: #64748b; margin-bottom: 16px; }
+    table { border-collapse: collapse; font-size: 9px; }
+    th, td { border: 1px solid #e2e8f0; padding: 4px 6px; text-align: center; }
+    th:first-child, td:first-child { text-align: left; min-width: 100px; }
+    th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; }
+    @media print { body { padding: 0; } }
+  </style></head><body>
+    <h1>Zero First Aid Award — Month-by-Month Heatmap</h1>
+    <div class="sub">${filterDesc} · Exported ${new Date().toLocaleString()}</div>
+    <table>
+      <thead><tr><th>Name</th>${headerCells}</tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  </body></html>`);
+
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 350);
 }
 
 // ── Init ──────────────────────────────────────────────────────
