@@ -171,7 +171,7 @@ let charts = {};
 let appData = {};
 
 // ── Nav ──────────────────────────────────────────────────────
-const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', departments:'Departments', sections:'Sections', injuries:'Injury Types', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', award:'Zero First Aid Award', prediction:'AI Prediction' };
+const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', award:'Zero First Aid Award', prediction:'AI Prediction' };
 
 function showView(id, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -402,13 +402,6 @@ function renderAll() {
   renderHeatmap();
   renderNatureChart();
   renderBodyChart();
-  renderAllDeptBars();
-  renderDeptAllChart();
-  renderInjTypeBars();
-  renderNatureBars();
-  renderBodyBars();
-  renderSectionBars();
-  renderSectionAllChart();
   initDeptTrendSelector();
   renderDeptTrendChart();
   renderTimeAnalysis();
