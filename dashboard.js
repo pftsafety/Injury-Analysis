@@ -397,6 +397,7 @@ function renderAll() {
   renderTrendChart();
   renderDeptBars();
   renderInjuryDonut();
+  yearChartState = { view: 'year', selectedYear: null }; // reset drill-down on every fresh load/refresh
   renderYearChart();
   renderGenderChart();
   renderHeatmap();
@@ -838,19 +839,72 @@ function renderInjuryDonut() {
 }
 
 // ── Year Chart ───────────────────────────────────────────────
+// ── Year chart: yearly totals by default, click a bar to see its months ──
+let yearChartState = { view: 'year', selectedYear: null };
+
 function renderYearChart() {
-  const ctx = document.getElementById('yearChart').getContext('2d');
+  const canvas = document.getElementById('yearChart');
+  if (!canvas) return;
   if (charts.year) charts.year.destroy();
+
+  const sub = document.getElementById('yearChartSub');
+  const backBtn = document.getElementById('yearChartBackBtn');
+
+  if (yearChartState.view === 'month' && yearChartState.selectedYear) {
+    // ── Drilled into a specific year — show its 12 months ──
+    const year = yearChartState.selectedYear;
+    const counts = new Array(12).fill(0);
+    (appData.monthly?.monthly || []).forEach(m => {
+      const [y, mm] = m.month.split('-');
+      if (y === year) counts[+mm - 1] = m.count;
+    });
+
+    if (backBtn) backBtn.style.display = 'inline-flex';
+    if (sub) sub.textContent = `${year} — month by month`;
+
+    charts.year = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: MONTH_NAMES,
+        datasets: [{ data: counts, backgroundColor: '#2563eb', borderRadius: 6, maxBarThickness: 46 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 600 },
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
+        scales: {
+          x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month') },
+          y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') }
+        }
+      }
+    });
+    return;
+  }
+
+  // ── Default: yearly totals — click a bar to drill into that year ──
   const sorted = Object.entries(appData.stats.byYear||{}).sort((a,b)=>a[0]-b[0]);
-  charts.year = new Chart(ctx, {
+  const years = sorted.map(([k])=>k);
+
+  if (backBtn) backBtn.style.display = 'none';
+  if (sub) sub.textContent = 'Total incidents per calendar year — click a bar to see monthly breakdown';
+
+  charts.year = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
-      labels: sorted.map(([k])=>k),
+      labels: years,
       datasets: [{ data: sorted.map(([,v])=>v), backgroundColor: '#2563eb', borderRadius: 6, maxBarThickness: 36 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 800, easing: 'easeOutQuart' },
+      onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length ? 'pointer' : 'default'; },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        yearChartState.view = 'month';
+        yearChartState.selectedYear = years[idx];
+        renderYearChart();
+      },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1 } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Year') },
@@ -858,6 +912,12 @@ function renderYearChart() {
       }
     }
   });
+}
+
+function yearChartShowYears() {
+  yearChartState.view = 'year';
+  yearChartState.selectedYear = null;
+  renderYearChart();
 }
 
 // ── Gender Chart ─────────────────────────────────────────────
