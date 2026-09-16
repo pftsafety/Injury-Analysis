@@ -1425,9 +1425,15 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
       <div id="view-trends" class="view">
         <div class="chart-grid grid-2" style="margin-bottom:16px">
           <div class="chart-card">
-            <div class="card-header">
-              <div class="card-title">Year-on-year</div>
-              <div class="card-sub">Total incidents per calendar year</div>
+            <div class="card-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div>
+                <div class="card-title">Year-on-year</div>
+                <div class="card-sub" id="yearChartSub">Total incidents per calendar year — click a bar to see monthly breakdown</div>
+              </div>
+              <button class="btn-refresh" id="yearChartBackBtn" onclick="yearChartShowYears()" style="display:none">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                Back to years
+              </button>
             </div>
             <div class="chart-wrap" style="height:220px">
               <canvas id="yearChart"></canvas>
