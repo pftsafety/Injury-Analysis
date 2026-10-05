@@ -171,7 +171,7 @@ let charts = {};
 let appData = {};
 
 // ── Nav ──────────────────────────────────────────────────────
-const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', award:'Zero First Aid Award', prediction:'AI Prediction' };
+const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', deptanalysis:'Department Analysis', award:'Zero First Aid Award', prediction:'AI Prediction' };
 
 function showView(id, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -417,6 +417,7 @@ function renderAll() {
   renderWatchlistView();
   renderHospitalView();
   renderAwardView();
+  initDeptAnalysis();
 }
 
 // ── KPIs ─────────────────────────────────────────────────────
@@ -4599,6 +4600,435 @@ function printAwardPdf() {
     <table>
       <thead><tr><th>Name</th>${headerCells}</tr></thead>
       <tbody>${tableRows}</tbody>
+    </table>
+  </body></html>`);
+
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 350);
+}
+
+// ── Department Analysis ─────────────────────────────────────────
+let deptAnalysisState = { fromMonth: '', toMonth: '', dept: '' };
+
+function initDeptAnalysis() {
+  const months = (appData.monthly?.monthly || []).map(m => m.month);
+  const optionsHtml = months.map(m => {
+    const [y, mm] = m.split('-');
+    return `<option value="${m}">${MONTH_NAMES[+mm-1]} ${y}</option>`;
+  }).join('');
+
+  const fromSel = document.getElementById('daFromMonth');
+  const toSel = document.getElementById('daToMonth');
+  if (fromSel) { const prev = fromSel.value; fromSel.innerHTML = `<option value="">All time</option>` + optionsHtml; if (months.includes(prev)) fromSel.value = prev; }
+  if (toSel) { const prev = toSel.value; toSel.innerHTML = `<option value="">Present</option>` + optionsHtml; if (months.includes(prev)) toSel.value = prev; }
+
+  const depts = Object.keys(appData.stats?.byDepartment || {}).sort();
+  const deptSel = document.getElementById('daDeptFilter');
+  if (deptSel) {
+    const prev = deptSel.value;
+    deptSel.innerHTML = `<option value="">All departments</option>` + depts.map(d => `<option value="${d}">${d}</option>`).join('');
+    if (depts.includes(prev)) deptSel.value = prev;
+  }
+
+  applyDeptAnalysisFilters();
+}
+
+function resetDeptAnalysisFilters() {
+  const fromSel = document.getElementById('daFromMonth');
+  const toSel = document.getElementById('daToMonth');
+  const deptSel = document.getElementById('daDeptFilter');
+  if (fromSel) fromSel.value = '';
+  if (toSel) toSel.value = '';
+  if (deptSel) deptSel.value = '';
+  deptAnalysisState = { fromMonth: '', toMonth: '', dept: '' };
+  applyDeptAnalysisFilters();
+}
+
+function getFilteredDeptRows() {
+  const rows = appData.raw?.data || [];
+  const { fromMonth, toMonth, dept } = deptAnalysisState;
+  return rows.filter(r => {
+    if (!r['Date']) return false;
+    const d = new Date(r['Date']);
+    if (isNaN(d)) return false;
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    if (fromMonth && key < fromMonth) return false;
+    if (toMonth && key > toMonth) return false;
+    if (dept && (r['Dept']||'').toString().trim() !== dept) return false;
+    return true;
+  });
+}
+
+function applyDeptAnalysisFilters() {
+  deptAnalysisState.fromMonth = document.getElementById('daFromMonth')?.value || '';
+  deptAnalysisState.toMonth = document.getElementById('daToMonth')?.value || '';
+  deptAnalysisState.dept = document.getElementById('daDeptFilter')?.value || '';
+
+  updateDeptAnalysisChips();
+
+  const allRows = appData.raw?.data || [];
+  const emptyState = document.getElementById('daEmptyState');
+
+  if (!allRows.length) {
+    if (emptyState) { emptyState.style.display = 'block'; emptyState.querySelector('div').textContent = 'Department Analysis needs live data'; }
+    clearDeptAnalysisCharts();
+    setDeptAnalysisKpisEmpty();
+    document.getElementById('daTableBody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Connect your Apps Script URL to see this data</td></tr>`;
+    return;
+  }
+
+  const filtered = getFilteredDeptRows();
+
+  if (!filtered.length) {
+    if (emptyState) { emptyState.style.display = 'block'; emptyState.querySelector('div').textContent = 'No incidents in this selection'; }
+    clearDeptAnalysisCharts();
+    setDeptAnalysisKpisEmpty();
+    document.getElementById('daTableBody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">No matching records</td></tr>`;
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  const periodLabel = document.getElementById('daPeriodLabel');
+  if (periodLabel) {
+    const fromLabel = deptAnalysisState.fromMonth ? `${MONTH_NAMES[+deptAnalysisState.fromMonth.split('-')[1]-1]} ${deptAnalysisState.fromMonth.split('-')[0]}` : 'All time';
+    const toLabel = deptAnalysisState.toMonth ? `${MONTH_NAMES[+deptAnalysisState.toMonth.split('-')[1]-1]} ${deptAnalysisState.toMonth.split('-')[0]}` : 'Present';
+    periodLabel.textContent = (deptAnalysisState.fromMonth || deptAnalysisState.toMonth) ? `${fromLabel} → ${toLabel}` : 'All departments · all time';
+  }
+
+  renderDeptAnalysisKpis(filtered, allRows);
+  renderDeptAnalysisRanking(filtered);
+  renderDeptAnalysisShare(filtered);
+  renderDeptAnalysisTrend(filtered);
+  renderDeptAnalysisGender(filtered);
+  renderDeptAnalysisTable(filtered);
+}
+
+function updateDeptAnalysisChips() {
+  const container = document.getElementById('daFilterChips');
+  if (!container) return;
+  const chips = [];
+  const { fromMonth, toMonth, dept } = deptAnalysisState;
+  if (fromMonth || toMonth) {
+    const fromLabel = fromMonth ? `${MONTH_NAMES[+fromMonth.split('-')[1]-1]} ${fromMonth.split('-')[0]}` : 'All time';
+    const toLabel = toMonth ? `${MONTH_NAMES[+toMonth.split('-')[1]-1]} ${toMonth.split('-')[0]}` : 'Present';
+    chips.push(`Period: ${fromLabel} → ${toLabel}`);
+  }
+  if (dept) chips.push(`Dept: ${dept}`);
+  container.innerHTML = chips.length
+    ? chips.map(c => `<span class="filter-chip">${c}</span>`).join('')
+    : `<span class="filter-chip dim">Showing all data — no filters applied</span>`;
+}
+
+function clearDeptAnalysisCharts() {
+  ['daRanking','daShare','daTrend','daGender'].forEach(k => {
+    if (charts[k]) { charts[k].destroy(); delete charts[k]; }
+  });
+}
+
+function setDeptAnalysisKpisEmpty() {
+  const c = document.getElementById('daKpiRow');
+  if (c) c.innerHTML = '';
+}
+
+function renderDeptAnalysisKpis(filtered, allRows) {
+  const container = document.getElementById('daKpiRow');
+  if (!container) return;
+  const deptTally = tallyRows(filtered, 'Dept');
+  const topDept = deptTally[0];
+  const numDepts = deptTally.length;
+  const topShare = topDept && filtered.length ? Math.round((topDept[1] / filtered.length) * 100) : 0;
+  const pctOfAll = allRows.length ? Math.round((filtered.length / allRows.length) * 1000) / 10 : 0;
+
+  container.innerHTML = `
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon c-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div class="kpi-label">Incidents in Selection</div>
+      <div class="kpi-value"><span class="counter">${filtered.length}</span></div>
+      <div class="kpi-sub">${pctOfAll}% of ${allRows.length} total</div>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon" style="background:var(--purple-dim);color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="kpi-label">Departments Involved</div>
+      <div class="kpi-value">${numDepts}</div>
+      <div class="kpi-sub">with at least one incident</div>
+    </div>
+    <div class="kpi-card c-red">
+      <div class="kpi-icon c-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <div class="kpi-label">Top Department</div>
+      <div class="kpi-value" style="font-size:15px;margin-top:6px">${topDept ? topDept[0] : '—'}</div>
+      <div class="kpi-sub">${topDept ? topDept[1] + ' incidents' : ''}</div>
+    </div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div class="kpi-label">Top Dept Concentration</div>
+      <div class="kpi-value">${topShare}%</div>
+      <div class="kpi-sub">of selection's incidents</div>
+    </div>
+  `;
+  container.querySelectorAll('.counter').forEach(el => animateCounter(el, parseInt(el.textContent) || 0));
+}
+
+function renderDeptAnalysisRanking(filtered) {
+  const canvas = document.getElementById('daRankingChart');
+  if (!canvas) return;
+  if (charts.daRanking) charts.daRanking.destroy();
+  const tally = tallyRows(filtered, 'Dept');
+  charts.daRanking = new Chart(canvas.getContext('2d'), {
+    type: 'bar', indexAxis: 'y',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') },
+        y: { grid: { display: false }, border: { color: BORDER } }
+      }
+    }
+  });
+}
+
+function renderDeptAnalysisShare(filtered) {
+  const canvas = document.getElementById('daShareChart');
+  if (!canvas) return;
+  if (charts.daShare) charts.daShare.destroy();
+  const tally = tallyRows(filtered, 'Dept');
+  charts.daShare = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } } }
+    }
+  });
+}
+
+function renderDeptAnalysisTrend(filtered) {
+  const canvas = document.getElementById('daTrendChart');
+  if (!canvas) return;
+  if (charts.daTrend) charts.daTrend.destroy();
+
+  const deptTotals = {};
+  filtered.forEach(r => {
+    const dept = (r['Dept'] || 'Unknown').toString().trim();
+    deptTotals[dept] = (deptTotals[dept] || 0) + 1;
+  });
+  const topDepts = Object.entries(deptTotals).sort((a,b) => b[1]-a[1]).slice(0, 6).map(([k]) => k);
+
+  const monthSet = new Set();
+  filtered.forEach(r => {
+    const d = new Date(r['Date']);
+    if (isNaN(d)) return;
+    monthSet.add(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'));
+  });
+  const months = [...monthSet].sort();
+
+  const deptMonthMap = {};
+  topDepts.forEach(d => deptMonthMap[d] = {});
+  filtered.forEach(r => {
+    const d = new Date(r['Date']);
+    if (isNaN(d)) return;
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const dept = (r['Dept'] || 'Unknown').toString().trim();
+    if (!topDepts.includes(dept)) return;
+    deptMonthMap[dept][key] = (deptMonthMap[dept][key] || 0) + 1;
+  });
+
+  const labels = months.map(m => { const [y, mm] = m.split('-'); return `${MONTH_NAMES[+mm-1]} '${y.slice(2)}`; });
+  const datasets = topDepts.map((dept, i) => ({
+    label: dept,
+    data: months.map(m => deptMonthMap[dept][m] || 0),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, fill: false
+  }));
+
+  const sub = document.getElementById('daTrendSub');
+  if (sub) sub.textContent = `Top ${topDepts.length} department(s) · ${months.length} month(s) in selection`;
+
+  charts.daTrend = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2, padding: 10, font: { size: 10 }, color: '#475569' } },
+        datalabels: { display: false } // multiple overlapping lines
+      },
+      scales: {
+        x: { grid: { color: GRID }, border: { color: BORDER }, title: axisLabel('Month'), ticks: { maxTicksLimit: 14 } },
+        y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') }
+      }
+    }
+  });
+}
+
+function renderDeptAnalysisGender(filtered) {
+  const canvas = document.getElementById('daGenderChart');
+  if (!canvas) return;
+  if (charts.daGender) charts.daGender.destroy();
+
+  const deptTally = tallyRows(filtered, 'Dept').slice(0, 8).map(([k]) => k);
+  const maleData = [], femaleData = [], otherData = [];
+  deptTally.forEach(dept => {
+    let male = 0, female = 0, other = 0;
+    filtered.forEach(r => {
+      if ((r['Dept']||'').toString().trim() !== dept) return;
+      const g = (r['Gender']||'').toString().trim();
+      if (g === 'Male') male++; else if (g === 'Female') female++; else other++;
+    });
+    maleData.push(male); femaleData.push(female); otherData.push(other);
+  });
+
+  const datasets = [
+    { label: 'Male', data: maleData, backgroundColor: '#2563eb', borderRadius: 4 },
+    { label: 'Female', data: femaleData, backgroundColor: '#db2777', borderRadius: 4 }
+  ];
+  if (otherData.some(v => v > 0)) datasets.push({ label: 'Other/Unknown', data: otherData, backgroundColor: '#94a3b8', borderRadius: 4 });
+
+  charts.daGender = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: deptTally, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 700 },
+      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, boxHeight: 12, color: '#475569', font: { size: 11 } } } },
+      scales: {
+        x: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, ticks: { maxRotation: 30 } },
+        y: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 } }
+      }
+    }
+  });
+}
+
+function renderDeptAnalysisTable(filtered) {
+  const tbody = document.getElementById('daTableBody');
+  const sub = document.getElementById('daTableSub');
+  if (!tbody) return;
+
+  const deptTally = tallyRows(filtered, 'Dept');
+  if (sub) sub.textContent = `${deptTally.length} department(s) · ${filtered.length} total incidents in selection`;
+
+  tbody.innerHTML = deptTally.map(([dept, count]) => {
+    const deptRows = filtered.filter(r => (r['Dept']||'').toString().trim() === dept);
+    const injTally = tallyRows(deptRows, 'Type of Injury');
+    const bodyTally = tallyRows(deptRows, 'Affected part');
+    const genderTally = Object.fromEntries(tallyRows(deptRows, 'Gender'));
+    const pct = filtered.length ? Math.round((count / filtered.length) * 1000) / 10 : 0;
+    return `
+      <tr>
+        <td style="font-weight:600">${dept}</td>
+        <td><span class="badge badge-cyan">${count}</span></td>
+        <td>${pct}%</td>
+        <td>${injTally[0] ? injTally[0][0] : '—'}</td>
+        <td>${bodyTally[0] ? bodyTally[0][0] : '—'}</td>
+        <td>${genderTally['Male'] || 0}</td>
+        <td>${genderTally['Female'] || 0}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ── Department Analysis Export: Excel ────────────────────────────
+function exportDeptAnalysisExcel() {
+  const filtered = getFilteredDeptRows();
+  if (!filtered.length) { alert('No data to export.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel export library failed to load. Please refresh and try again.'); return; }
+
+  const deptTally = tallyRows(filtered, 'Dept');
+  const summaryRows = deptTally.map(([dept, count]) => {
+    const deptRows = filtered.filter(r => (r['Dept']||'').toString().trim() === dept);
+    const injTally = tallyRows(deptRows, 'Type of Injury');
+    const bodyTally = tallyRows(deptRows, 'Affected part');
+    const genderTally = Object.fromEntries(tallyRows(deptRows, 'Gender'));
+    const pct = filtered.length ? Math.round((count / filtered.length) * 1000) / 10 : 0;
+    return {
+      'Department': dept,
+      'Total Incidents': count,
+      '% of Period': pct,
+      'Top Injury Type': injTally[0] ? injTally[0][0] : '',
+      'Top Body Part': bodyTally[0] ? bodyTally[0][0] : '',
+      'Male': genderTally['Male'] || 0,
+      'Female': genderTally['Female'] || 0
+    };
+  });
+
+  const cardNoOf = r => (r['Card No:'] || r['Card No'] || r['Card No.'] || '').toString();
+  const detailRows = filtered.map(r => ({
+    'Date': r['Date'] ? new Date(r['Date']).toLocaleDateString('en-GB') : '',
+    'Card No': cardNoOf(r),
+    'Name': r['Name'] || '',
+    'Department': r['Dept'] || '',
+    'Section': r['Section'] || '',
+    'Type of Injury': r['Type of Injury'] || '',
+    'Nature of Incident': r['Nature of Incident'] || '',
+    'Affected Part': r['Affected part'] || '',
+    'Gender': r['Gender'] || '',
+    'Description': r['Description of Incident'] || ''
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.json_to_sheet(summaryRows);
+  ws1['!cols'] = [{wch:18},{wch:14},{wch:12},{wch:18},{wch:16},{wch:8},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Department Summary');
+
+  const ws2 = XLSX.utils.json_to_sheet(detailRows);
+  ws2['!cols'] = [{wch:11},{wch:10},{wch:16},{wch:16},{wch:14},{wch:16},{wch:20},{wch:14},{wch:9},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Incident Detail');
+
+  const dateTag = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `SHE_Department_Analysis_${dateTag}.xlsx`);
+}
+
+// ── Department Analysis Export: Print / PDF ──────────────────────
+function printDeptAnalysisPdf() {
+  const filtered = getFilteredDeptRows();
+  if (!filtered.length) { alert('No data to print.'); return; }
+
+  const deptTally = tallyRows(filtered, 'Dept');
+  const rowsHtml = deptTally.map(([dept, count]) => {
+    const deptRows = filtered.filter(r => (r['Dept']||'').toString().trim() === dept);
+    const injTally = tallyRows(deptRows, 'Type of Injury');
+    const bodyTally = tallyRows(deptRows, 'Affected part');
+    const genderTally = Object.fromEntries(tallyRows(deptRows, 'Gender'));
+    const pct = filtered.length ? Math.round((count / filtered.length) * 1000) / 10 : 0;
+    return `<tr>
+      <td style="font-weight:600">${dept}</td><td>${count}</td><td>${pct}%</td>
+      <td>${injTally[0] ? injTally[0][0] : '—'}</td><td>${bodyTally[0] ? bodyTally[0][0] : '—'}</td>
+      <td>${genderTally['Male'] || 0}</td><td>${genderTally['Female'] || 0}</td>
+    </tr>`;
+  }).join('');
+
+  const { fromMonth, toMonth, dept } = deptAnalysisState;
+  const filterDesc = [
+    (fromMonth || toMonth) ? `Period: ${fromMonth || 'All time'} → ${toMonth || 'Present'}` : 'Period: All time',
+    dept ? `Department: ${dept}` : null
+  ].filter(Boolean).join(' · ');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { alert('Please allow popups to use Print / PDF export.'); return; }
+
+  printWindow.document.write(`<!DOCTYPE html><html><head><title>Department Analysis</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 9px; }
+    tr:nth-child(even) { background: #f8fafc; }
+    @media print { body { padding: 0; } }
+  </style></head><body>
+    <h1>Department Analysis</h1>
+    <div class="sub">${filterDesc} · ${filtered.length} incident(s) · Exported ${new Date().toLocaleString()}</div>
+    <table>
+      <thead><tr><th>Department</th><th>Total</th><th>% of Period</th><th>Top Injury</th><th>Top Body Part</th><th>Male</th><th>Female</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
 
