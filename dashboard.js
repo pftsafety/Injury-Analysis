@@ -4427,14 +4427,14 @@ function buildDeptRows(data, filteredMonths, deptFilter) {
       if ((clusterName === 'Cluster 1A' || clusterName === 'Cluster 1B') && dept.isGroup && dept.members) {
         const sections = Object.entries(data.sections || {})
           .filter(([, s]) => dept.members.includes(s.dept))
-          .sort((a, b) => (a[1].dept || '').localeCompare(b[1].dept || '') || a[0].localeCompare(b[0]));
+          .sort((a, b) => (a[1].dept || '').localeCompare(b[1].dept || '') || (a[1].section || '').localeCompare(b[1].section || ''));
         if (sections.length) {
           rows.push({ subheader: 'Section-wise injury heatmap — ' + dept.department });
-          sections.forEach(([section, s]) => {
+          sections.forEach(([, s]) => {
             const sMap = {};
             (s.monthStatus || []).forEach(ms => { sMap[ms.month] = ms; });
             rows.push({
-              label: '↳ ' + section,
+              label: '↳ ' + (s.section || ''),
               sublabel: s.dept,
               isSection: true,
               cells: filteredMonths.map(m => sMap[m] || { month: m, count: null, zero: null, isCurrent: false })
@@ -4451,8 +4451,9 @@ function buildSectionRows(data, filteredMonths, deptFilter) {
   const sections = data.sections || {};
   return Object.entries(sections)
     .filter(([, s]) => !deptFilter || s.dept === deptFilter)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([section, s]) => {
+    .sort((a, b) => (a[1].dept || '').localeCompare(b[1].dept || '') || (a[1].section || '').localeCompare(b[1].section || ''))
+    .map(([, s]) => {
+      const section = s.section || '';
       const statusMap = {};
       (s.monthStatus || []).forEach(ms => { statusMap[ms.month] = ms; });
       return {
