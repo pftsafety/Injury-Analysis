@@ -4406,6 +4406,23 @@ function renderAwardHeatmap(data, filteredMonths) {
   }
 }
 
+// Resolves a sheet row to its group member (Section first, then Dept), using the backend's alias map.
+function awardCanonicalFromRow(r, data) {
+  if (!data._aliasIndex) {
+    const idx = {};
+    Object.entries(data.memberAliases || {}).forEach(([canon, aliases]) => {
+      aliases.forEach(a => { idx[a.trim().toLowerCase()] = canon; });
+    });
+    data._aliasIndex = idx;
+  }
+  const candidates = [r['Section'], r['Dept']];
+  for (const v of candidates) {
+    const k = (v || '').toString().trim().toLowerCase();
+    if (k && data._aliasIndex[k]) return data._aliasIndex[k];
+  }
+  return null;
+}
+
 // Section rows for a Cluster 1 group, built from the incident rows so every member department appears.
 // Falls back to the backend section list only when raw incident rows are not loaded (demo mode).
 function buildGroupSectionRows(members, data, filteredMonths) {
@@ -4418,10 +4435,10 @@ function buildGroupSectionRows(members, data, filteredMonths) {
       if (!r['Date']) return;
       const d = new Date(r['Date']);
       if (isNaN(d)) return;
-      const dept = (r['Dept'] || '').toString().trim();
-      if (!members.includes(dept)) return;
+      const dept = awardCanonicalFromRow(r, data);
+      if (!dept || !members.includes(dept)) return;
       const section = (r['Section'] || '').toString().trim() || 'Unknown';
-      const key = dept + ' | ' + section;
+      const key = dept + ' | ' + section.toLowerCase();
       const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
       if (!bucket[key]) bucket[key] = { dept: dept, section: section, counts: {} };
       bucket[key].counts[mk] = (bucket[key].counts[mk] || 0) + 1;
