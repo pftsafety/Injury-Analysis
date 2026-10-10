@@ -2348,6 +2348,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
               <select id="awardViewMode" class="year-select" onchange="applyAwardFilters()">
                 <option value="dept">By Department</option>
                 <option value="section">By Section</option>
+                <option value="winners">Monthly winners</option>
               </select>
             </div>
             <button class="btn-refresh" style="align-self:flex-end" onclick="resetAwardFilters()">
@@ -2363,6 +2364,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 
         <!-- Cluster Cards (dept view only) -->
         <div id="awardClusters"></div>
+        <div id="awardWinners" style="display:none"></div>
 
         <!-- Month-by-month heatmap -->
         <div class="chart-card" style="margin-bottom:16px">
