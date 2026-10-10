@@ -354,23 +354,18 @@ function loadDemoData() {
         totalAwardsCurrentlyEligible: 3,
         clusters: {
           'Cluster 1A': {
-            label: 'Non-Production — Group A', rule: 'Zero incidents for 3 consecutive months', streakRequired: 3,
+            label: 'Non-Production — Group A', rule: 'Zero incidents for 3 consecutive months (whole group)', streakRequired: 3,
             departments: [
-              { department: 'MT & R&D Lab', currentStreak: 0, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('MT & R&D Lab', [2, 5, 8, months.length-1]) },
-              { department: 'QA', currentStreak: 4, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('QA', [1, 6]) }
+              { department: 'MT & R&D Lab + QA', isGroup: true, members: ['MT & R&D Lab', 'QA'], currentStreak: 0, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 3, monthStatus: makeDeptStatus('MT & R&D Lab + QA', [2, 5, 8, months.length-1]) }
             ],
-            clusterEligibleDepts: ['QA']
+            clusterEligibleDepts: []
           },
           'Cluster 1B': {
-            label: 'Non-Production — Group B', rule: 'Zero incidents for 3 consecutive months', streakRequired: 3,
+            label: 'Non-Production — Administration', rule: 'Zero incidents for 3 consecutive months (whole group)', streakRequired: 3,
             departments: [
-              { department: 'Stores', currentStreak: 1, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 1, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('Stores', [3, months.length-2]) },
-              { department: 'HR', currentStreak: months.length, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 5, awardMonths: [], longestStreak: months.length, monthStatus: makeDeptStatus('HR', []) },
-              { department: 'Finance', currentStreak: 2, streakRequired: 3, isCurrentlyEligible: false, totalAwardsEarned: 2, awardMonths: [], longestStreak: 4, monthStatus: makeDeptStatus('Finance', [2, months.length-3]) },
-              { department: 'Purchase', currentStreak: 3, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 2, awardMonths: [], longestStreak: 5, monthStatus: makeDeptStatus('Purchase', [1, 5]) },
-              { department: 'Administration', currentStreak: 5, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 7, monthStatus: makeDeptStatus('Administration', [1, 8]) }
+              { department: 'Administration', isGroup: true, members: ['HR', 'Finance', 'Sales', 'Purchase', 'Canteen', 'Housekeeping', 'Stores'], currentStreak: 5, streakRequired: 3, isCurrentlyEligible: true, totalAwardsEarned: 3, awardMonths: [], longestStreak: 7, monthStatus: makeDeptStatus('Administration', [1, 8]) }
             ],
-            clusterEligibleDepts: ['HR', 'Purchase', 'Administration']
+            clusterEligibleDepts: ['Administration']
           },
           'Cluster 2': {
             label: 'Production & Engineering', rule: 'Zero incidents every month', streakRequired: 1,
@@ -4319,6 +4314,22 @@ function renderAwardClusters(data, filteredMonths) {
       }
       const eligible = streak >= dept.streakRequired;
       const streakPct = Math.min(100, Math.round((streak / dept.streakRequired) * 100));
+
+      // For group entries: list members, and name the member(s) that broke the most recent zero streak
+      let membersLine = '';
+      if (dept.isGroup && dept.members) {
+        let brokeLine = '';
+        if (!eligible) {
+          const lastBreak = completedFiltered.slice().reverse().find(ms => !ms.zeroFirstAid);
+          if (lastBreak && lastBreak.memberCounts) {
+            const who = Object.entries(lastBreak.memberCounts).map(([k, v]) => `${k} (${v})`).join(', ');
+            const [y, mm] = lastBreak.month.split('-');
+            brokeLine = `<div style="font-size:10px;color:var(--amber);margin-top:4px">Last broken ${MONTH_NAMES[+mm-1]} ${y}: ${who}</div>`;
+          }
+        }
+        membersLine = `<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Members: ${dept.members.join(', ')}</div>${brokeLine}`;
+      }
+
       return `
         <div class="award-dept-card ${eligible ? 'award-eligible' : ''}">
           <div class="award-dept-header">
@@ -4327,6 +4338,7 @@ function renderAwardClusters(data, filteredMonths) {
               ? `<span class="badge badge-green">✓ Eligible</span>`
               : `<span class="badge badge-muted">Streak: ${streak}/${dept.streakRequired}</span>`}
           </div>
+          ${membersLine}
           <div class="award-streak-bar">
             <div class="award-streak-fill ${eligible ? 'eligible' : ''}" style="width:${streakPct}%"></div>
           </div>
@@ -4358,8 +4370,8 @@ function renderAwardClusters(data, filteredMonths) {
     const rule1 = (cluster1A || cluster1B).rule;
     html += `<div class="chart-card" style="margin-bottom:16px">
       <div class="card-header"><div class="card-title">Cluster 1 — Non-Production</div><div class="card-sub">${rule1}</div></div>
-      ${cluster1A ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:16px 0 8px">Group A — MT &amp; R&amp;D Lab, QA</div>${eligibleLine(cluster1A)}<div class="award-dept-grid">${deptCardsHtml(cluster1A)}</div>` : ''}
-      ${cluster1B ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--border)">Group B — Stores, HR, Finance, Purchase, Administration</div>${eligibleLine(cluster1B)}<div class="award-dept-grid">${deptCardsHtml(cluster1B)}</div>` : ''}
+      ${cluster1A ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:16px 0 8px">Group A — ${cluster1A.departments[0].department}</div>${eligibleLine(cluster1A)}<div class="award-dept-grid">${deptCardsHtml(cluster1A)}</div>` : ''}
+      ${cluster1B ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--border)">Group B — ${cluster1B.departments[0].department}</div>${eligibleLine(cluster1B)}<div class="award-dept-grid">${deptCardsHtml(cluster1B)}</div>` : ''}
     </div>`;
   }
   if (cluster2) {
@@ -4396,16 +4408,23 @@ function renderAwardHeatmap(data, filteredMonths) {
 
 function buildDeptRows(data, filteredMonths, deptFilter) {
   const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || []);
-  return allDepts
-    .filter(d => !deptFilter || d.department === deptFilter)
-    .map(dept => {
+  const rows = [];
+  Object.entries(data.clusters || {}).forEach(([clusterName, cluster]) => {
+    const entities = (cluster.departments || []).filter(d => !deptFilter || d.department === deptFilter);
+    if (!entities.length) return;
+    // Separation heading per cluster / group so Administration and MT & R&D Lab sit apart
+    rows.push({ header: cluster.label, rule: cluster.rule });
+    entities.forEach(dept => {
       const statusMap = {};
       (dept.monthStatus || []).forEach(ms => { statusMap[ms.month] = ms; });
-      return {
+      rows.push({
         label: dept.department,
+        sublabel: dept.isGroup && dept.members ? dept.members.join(', ') : '',
         cells: filteredMonths.map(m => statusMap[m] || { month: m, firstAidCount: null, zeroFirstAid: null, isCurrent: false })
-      };
+      });
     });
+  });
+  return rows;
 }
 
 function buildSectionRows(data, filteredMonths, deptFilter) {
@@ -4430,25 +4449,35 @@ function buildSectionRows(data, filteredMonths, deptFilter) {
 function renderAwardHeatmapGrid(container, rows) {
   const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+  const firstData = rows.find(r => r.cells);
   const headerRow = `<div class="award-heatmap-row header">
     <div class="award-heatmap-label">Name</div>
-    ${rows[0] ? rows[0].cells.map(cell => {
+    ${firstData ? firstData.cells.map(cell => {
       const [y, mm] = cell.month.split('-');
       return `<div class="award-heatmap-cell header" title="${MONTH_SHORT[+mm-1]} ${y}">${MONTH_SHORT[+mm-1].charAt(0)}<br><span style="font-size:8px">${y.slice(2)}</span></div>`;
     }).join('') : ''}
   </div>`;
 
   const dataRows = rows.map(row => {
+    if (row.header) {
+      return `<div class="award-heatmap-group-header">
+        <span style="font-weight:700;color:var(--text)">${row.header}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:10px">${row.rule || ''}</span>
+      </div>`;
+    }
     const cells = row.cells.map(ms => {
       const count = ms.firstAidCount ?? ms.count;
+      const who = ms.memberCounts && Object.keys(ms.memberCounts).length
+        ? ' — ' + Object.entries(ms.memberCounts).map(([k, v]) => `${k} ${v}`).join(', ')
+        : '';
       if (count === null || count === undefined) return `<div class="award-heatmap-cell na" title="${ms.month}: No data">–</div>`;
       if (ms.isCurrent) return `<div class="award-heatmap-cell current" title="${ms.month}: Current month">${count}</div>`;
       if (ms.zeroFirstAid ?? ms.zero) return `<div class="award-heatmap-cell zero" title="${ms.month}: ✓ Zero incidents">0</div>`;
-      return `<div class="award-heatmap-cell fail" title="${ms.month}: ${count} incident(s)">${count}</div>`;
+      return `<div class="award-heatmap-cell fail" title="${ms.month}: ${count} incident(s)${who}">${count}</div>`;
     }).join('');
     return `<div class="award-heatmap-row">
       <div class="award-heatmap-label" title="${row.label}">
-        ${row.label}${row.sublabel ? `<br><span style="font-size:9px;color:var(--muted)">${row.sublabel}</span>` : ''}
+        ${row.label}${row.sublabel ? `<br><span style="font-size:9px;color:var(--muted);white-space:normal">${row.sublabel}</span>` : ''}
       </div>
       ${cells}
     </div>`;
@@ -4479,7 +4508,8 @@ function exportAwardExcel() {
   const filtered = rawRows.filter(r => {
     if (fromMonth && r.month < fromMonth) return false;
     if (toMonth   && r.month > toMonth)   return false;
-    if (deptFilter && r.dept !== deptFilter) return false;
+    const groupMembers = deptFilter ? (data.groupMembers?.[deptFilter] || null) : null;
+    if (deptFilter && (groupMembers ? !groupMembers.includes(r.dept) : r.dept !== deptFilter)) return false;
     return true;
   });
 
@@ -4565,6 +4595,7 @@ function printAwardPdf() {
   }).join('');
 
   const tableRows = rows.map(row => {
+    if (row.header) return `<tr><td colspan="${filteredMonths.length + 1}" style="background:#f1f5f9;font-weight:700;text-align:left">${row.header}${row.rule ? ' — ' + row.rule : ''}</td></tr>`;
     const cells = row.cells.map(ms => {
       const count = ms.firstAidCount ?? ms.count;
       if (count === null || count === undefined) return `<td style="background:#f1f5f9;color:#94a3b8">–</td>`;
