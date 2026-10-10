@@ -1192,6 +1192,30 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 }
 .animated-underline.done::after { width: 100%; }
 
+/* ── Global search ── */
+.gsearch-wrap { position: relative; }
+#globalSearch {
+  width: 280px; background: var(--card2); border: 1px solid var(--border2); color: var(--text);
+  font-size: 12px; font-family: var(--font-body); padding: 8px 12px; border-radius: 9px; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+#globalSearch::placeholder { color: var(--muted); }
+#globalSearch:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-dim); }
+.gsearch-results {
+  position: absolute; top: calc(100% + 6px); right: 0; width: 360px; max-height: 380px; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--border2); border-radius: 12px; box-shadow: var(--shadow-md);
+  z-index: 300; padding: 6px; display: none;
+}
+.gsearch-results.open { display: block; }
+.gsearch-group { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 8px 10px 4px; }
+.gsearch-item { display: flex; align-items: center; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; color: var(--text); }
+.gsearch-item:hover, .gsearch-item.active { background: var(--card2); }
+.gsearch-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.gsearch-empty { padding: 12px 10px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+@media (max-width: 1100px) { #globalSearch { width: 200px; } }
+@media (max-width: 900px) { #globalSearch { width: 150px; } .gsearch-results { width: 300px; } }
+@media (max-width: 640px) { .gsearch-wrap { display: none; } }
+
 /* ── Skeleton loading ── */
 .skeleton { background: linear-gradient(90deg, var(--card2) 25%, var(--border) 50%, var(--card2) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; height: 12px; margin: 8px 0; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
@@ -1335,6 +1359,10 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
         </div>
       </div>
       <div class="topbar-right">
+        <div class="gsearch-wrap">
+          <input type="text" id="globalSearch" placeholder="Search employee, card, dept, section…   ( / )" autocomplete="off" aria-label="Search the dashboard">
+          <div class="gsearch-results" id="globalSearchResults" role="listbox"></div>
+        </div>
         <div class="alert-bell-wrap">
           <button class="alert-bell" id="alertBell" title="High-risk departments" onclick="toggleAlertPanel(event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -2288,7 +2316,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
         </div>
 
         <!-- KPIs -->
-        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="daKpiRow"></div>
+        <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px" id="daKpiRow"></div>
 
         <!-- Ranking + Share -->
         <div class="chart-grid grid-2" style="margin-bottom:16px">
@@ -2343,10 +2371,10 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           <div class="tbl-wrap">
             <table>
               <thead>
-                <tr><th>Department</th><th>Total</th><th>% of Period</th><th>Top Injury Type</th><th>Top Body Part</th><th>Male</th><th>Female</th></tr>
+                <tr><th>Department</th><th>Total</th><th>% of Period</th><th>Top Injury Type</th><th>Top Body Part</th><th>Male</th><th>Female</th><th>Days since last</th></tr>
               </thead>
               <tbody id="daTableBody">
-                <tr><td colspan="7" style="padding:14px 16px"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:65%"></div></td></tr>
+                <tr><td colspan="8" style="padding:14px 16px"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:65%"></div></td></tr>
               </tbody>
             </table>
           </div>
