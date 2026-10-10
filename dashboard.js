@@ -2864,6 +2864,23 @@ async function triggerPrediction() {
   }
 }
 
+function renderBaselinesHtml(cm) {
+  const b = cm.baselines;
+  if (!b) return '';
+  const rel = (cm.predictedIncidents != null && b.center != null)
+    ? (cm.predictedIncidents > b.center ? 'above' : cm.predictedIncidents < b.center ? 'below' : 'in line with') : null;
+  const card = (label, value, note) => `<div class="review-card">
+      <div class="review-card-title">${label}</div>
+      <div style="font-size:22px;font-weight:700;color:var(--text);font-family:var(--font-display)">${value ?? '—'}</div>
+      <div style="font-size:11px;color:var(--muted)">${note}</div>
+    </div>`;
+  return `<div class="review-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+      ${card('Same month last year', b.sameMonthLastYear, 'actual count')}
+      ${card('Same-month average', b.seasonalAvg, 'across ' + b.seasonalYears + ' prior year(s)')}
+      ${card('Trailing 12-month average', b.avg12, 'incidents per month')}
+    </div>${rel ? `<div style="font-size:11px;color:var(--muted);margin-bottom:14px">AI forecast of ${cm.predictedIncidents} is ${rel} the same-month baseline of ${b.center}.</div>` : ''}`;
+}
+
 function renderPrediction(p, cachedAt) {
   const output = document.getElementById('predOutput');
   document.getElementById('predEmpty').style.display = 'none';
@@ -3049,15 +3066,16 @@ function renderPrediction(p, cachedAt) {
       <div class="kpi-card c-cyan">
         <div class="kpi-label">Predicted Incidents</div>
         <div class="kpi-value">${curr.predictedIncidents ?? '—'}</div>
-        <div class="kpi-sub">This month estimate</div>
+        <div class="kpi-sub">${curr.range ? 'Range ' + curr.range.low + '–' + curr.range.high : 'This month estimate'}</div>
       </div>
       <div class="kpi-card c-green">
         <div class="kpi-label">Confidence</div>
-        <div class="kpi-value">${curr.confidencePercent ?? '—'}%</div>
-        <div class="kpi-sub">Model confidence</div>
+        <div class="kpi-value">${curr.confidencePercent != null ? curr.confidencePercent + '%' : '—'}</div>
+        <div class="kpi-sub">${curr.confidenceSource || 'Model confidence'}</div>
       </div>
     </div>
 
+    ${renderBaselinesHtml(curr)}
     ${curr.trendInsight || curr.seasonalFactors || curr.benchmarkComparison ? `
     <div class="pred-factors">
       ${curr.trendInsight ? `<div><span class="factor-label trend">Trend</span>${curr.trendInsight}</div>` : ''}
@@ -3186,7 +3204,10 @@ const DEMO_PREDICTION = {
     generatedFor: "July 2026",
     riskLevel: "High",
     predictedIncidents: 27,
-    confidencePercent: 76,
+    range: { low: 21, likely: 27, high: 31, basis: "one standard deviation of same month in prior years" },
+    baselines: { sameMonthLastYear: 22, seasonalAvg: 24, seasonalYears: 4, avg12: 23, center: 24, sd: 4, spreadBasis: "same month in prior years" },
+    confidenceSource: "From track record: 5 months, average error 10.9%",
+    confidencePercent: 89,
     summary: "Building on June's patterns, July carries elevated risk due to monsoon onset in Kerala combined with high production load. The unresolved eye protection compliance gap from June is likely to carry over, and wet-floor risks will intensify with monsoon rains tracked into factory entrances.",
     benchmarkComparison: "27 predicted incidents would be 12% above the 5-year historical average of 24 for the month of July, continuing the upward seasonal pattern.",
     departmentRiskRanking: [
@@ -4882,6 +4903,39 @@ function printAwardPdf() {
   setTimeout(() => { printWindow.print(); }, 350);
 }
 
+// ── Days since last incident ──
+const DAY_MS = 86400000;
+function lastIncidentDate(rows) {
+  let max = null;
+  rows.forEach(r => {
+    if (!r['Date']) return;
+    const dt = new Date(r['Date']);
+    if (!isNaN(dt) && (!max || dt > max)) max = dt;
+  });
+  return max;
+}
+function daysSinceDate(dt) {
+  if (!dt) return null;
+  return Math.max(0, Math.floor((new Date() - dt) / DAY_MS));
+}
+function daysSinceBadge(n) {
+  if (n === null) return '<span style="color:var(--muted)">—</span>';
+  const cls = n >= 30 ? 'badge-green' : n >= 7 ? 'badge-amber' : 'badge-red';
+  return '<span class="badge ' + cls + '">' + n + ' day' + (n === 1 ? '' : 's') + '</span>';
+}
+function appendDaysSinceColumn(tbody) {
+  const all = appData.raw?.data || [];
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const first = tr.querySelector('td');
+    if (!first || first.colSpan > 1) return;
+    const dept = first.textContent.trim();
+    const dt = lastIncidentDate(all.filter(r => (r['Dept'] || '').toString().trim() === dept));
+    const cell = document.createElement('td');
+    cell.innerHTML = daysSinceBadge(daysSinceDate(dt));
+    tr.appendChild(cell);
+  });
+}
+
 // ── Department Analysis ─────────────────────────────────────────
 let deptAnalysisState = { fromMonth: '', toMonth: '', dept: '' };
 
@@ -4948,7 +5002,7 @@ function applyDeptAnalysisFilters() {
     if (emptyState) { emptyState.style.display = 'block'; emptyState.querySelector('div').textContent = 'Department Analysis needs live data'; }
     clearDeptAnalysisCharts();
     setDeptAnalysisKpisEmpty();
-    document.getElementById('daTableBody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Connect your Apps Script URL to see this data</td></tr>`;
+    document.getElementById('daTableBody').innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Connect your Apps Script URL to see this data</td></tr>`;
     return;
   }
 
@@ -4958,7 +5012,7 @@ function applyDeptAnalysisFilters() {
     if (emptyState) { emptyState.style.display = 'block'; emptyState.querySelector('div').textContent = 'No incidents in this selection'; }
     clearDeptAnalysisCharts();
     setDeptAnalysisKpisEmpty();
-    document.getElementById('daTableBody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">No matching records</td></tr>`;
+    document.getElementById('daTableBody').innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">No matching records</td></tr>`;
     return;
   }
 
@@ -5042,6 +5096,15 @@ function renderDeptAnalysisKpis(filtered, allRows) {
     </div>
   `;
   container.querySelectorAll('.counter').forEach(el => animateCounter(el, parseInt(el.textContent) || 0));
+  const lastAll = lastIncidentDate(allRows);
+  const daysAll = daysSinceDate(lastAll);
+  container.insertAdjacentHTML('beforeend', `
+    <div class="kpi-card c-green">
+      <div class="kpi-icon c-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="kpi-label">Days Since Last Incident</div>
+      <div class="kpi-value">${daysAll === null ? '—' : daysAll}</div>
+      <div class="kpi-sub">${lastAll ? 'Last on ' + lastAll.toLocaleDateString('en-GB') + ' · all departments' : 'No incidents recorded'}</div>
+    </div>`);
 }
 
 function renderDeptAnalysisRanking(filtered) {
@@ -5206,6 +5269,7 @@ function renderDeptAnalysisTable(filtered) {
       </tr>
     `;
   }).join('');
+  appendDaysSinceColumn(tbody);
 }
 
 // ── Department Analysis Export: Excel ────────────────────────────
@@ -5310,6 +5374,156 @@ function printDeptAnalysisPdf() {
   printWindow.focus();
   setTimeout(() => { printWindow.print(); }, 350);
 }
+
+// ── Global search: employees, departments, sections and tabs in one box ──
+let gsIndex = null, gsIndexSource = null, gsResults = [], gsActive = -1;
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function buildGlobalSearchIndex() {
+  if (gsIndex && gsIndexSource === appData) return gsIndex;
+  const rows = appData.raw?.data || [];
+  const emp = {}, sec = {};
+  rows.forEach(r => {
+    const k = getRowEmployeeKey(r);
+    if (k.name !== 'Unknown' || k.cardNo) {
+      const key = k.cardNo ? 'card:' + k.cardNo : 'name:' + k.name.toLowerCase();
+      if (!emp[key]) emp[key] = { name: k.name, cardNo: k.cardNo, count: 0 };
+      else if (emp[key].name === 'Unknown' && k.name !== 'Unknown') emp[key].name = k.name;
+      emp[key].count++;
+    }
+    const s = (r['Section'] || '').toString().trim();
+    const dp = (r['Dept'] || '').toString().trim();
+    if (s) {
+      const sk = s.toLowerCase() + '|' + dp;
+      if (!sec[sk]) sec[sk] = { section: s, dept: dp, count: 0 };
+      sec[sk].count++;
+    }
+  });
+  const byDept = appData.stats?.byDepartment || {};
+  gsIndex = {
+    employees: Object.values(emp),
+    sections: Object.values(sec),
+    depts: Object.keys(byDept).map(name => ({ name, count: byDept[name] }))
+  };
+  gsIndexSource = appData;
+  return gsIndex;
+}
+
+function runGlobalSearch(query) {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const idx = buildGlobalSearchIndex();
+  const hit = s => String(s || '').toLowerCase().includes(q);
+  const groups = [
+    ['Employees', idx.employees
+      .filter(e => hit(e.name) || hit(e.cardNo))
+      .sort((a, b) => b.count - a.count).slice(0, 6)
+      .map(e => ({ type: 'employee', title: e.name, sub: (e.cardNo ? 'Card ' + e.cardNo + ' · ' : '') + e.count + ' incident(s)', payload: e }))],
+    ['Departments', idx.depts
+      .filter(d => hit(d.name)).slice(0, 4)
+      .map(d => ({ type: 'dept', title: d.name, sub: d.count + ' incident(s) · open Department Analysis', payload: d }))],
+    ['Sections', idx.sections
+      .filter(s => hit(s.section) || hit(s.dept))
+      .sort((a, b) => b.count - a.count).slice(0, 5)
+      .map(s => ({ type: 'section', title: s.section, sub: (s.dept ? s.dept + ' · ' : '') + s.count + ' incident(s) · open Records', payload: s }))],
+    ['Go to', Object.entries(VIEW_TITLES)
+      .filter(([, t]) => hit(t)).slice(0, 3)
+      .map(([id, t]) => ({ type: 'tab', title: t, sub: 'Open tab', payload: { id } }))]
+  ];
+  return groups.filter(g => g[1].length);
+}
+
+function renderGlobalResults(groups) {
+  const box = document.getElementById('globalSearchResults');
+  if (!box) return;
+  gsResults = groups.flatMap(g => g[1]);
+  gsActive = gsResults.length ? 0 : -1;
+  const query = document.getElementById('globalSearch')?.value.trim() || '';
+  if (query.length < 2) { box.classList.remove('open'); box.innerHTML = ''; return; }
+  if (!gsResults.length) {
+    box.innerHTML = '<div class="gsearch-empty">No matches. Try a name, card number, department or section.</div>';
+  } else {
+    box.innerHTML = groups.map(([label, items]) =>
+      '<div class="gsearch-group">' + label + '</div>' +
+      items.map(item => '<div class="gsearch-item" data-gs="' + gsResults.indexOf(item) + '"><div><div>' +
+        escHtml(item.title) + '</div><div class="gsearch-sub">' + escHtml(item.sub) + '</div></div></div>').join('')
+    ).join('');
+  }
+  box.classList.add('open');
+  highlightGlobalResult();
+}
+
+function highlightGlobalResult() {
+  document.querySelectorAll('#globalSearchResults .gsearch-item').forEach((el, i) => {
+    el.classList.toggle('active', i === gsActive);
+    if (i === gsActive) el.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function closeGlobalSearch() {
+  document.getElementById('globalSearchResults')?.classList.remove('open');
+}
+
+function navButtonFor(id) {
+  return document.querySelector('.nav-btn[onclick*="showView(\'' + id + '\'"]');
+}
+
+function runGlobalResult(item) {
+  closeGlobalSearch();
+  if (!item) return;
+  if (item.type === 'tab') {
+    showView(item.payload.id, navButtonFor(item.payload.id));
+  } else if (item.type === 'employee') {
+    showView('employee', navButtonFor('employee'));
+    const s = document.getElementById('empSearch');
+    if (s) s.value = item.payload.name;
+    renderEmployeeProfile(item.payload.name, item.payload.cardNo);
+  } else if (item.type === 'dept') {
+    showView('deptanalysis', navButtonFor('deptanalysis'));
+    const sel = document.getElementById('daDeptFilter');
+    if (sel) sel.value = item.payload.name;
+    applyDeptAnalysisFilters();
+  } else if (item.type === 'section') {
+    showView('records', navButtonFor('records'));
+    const rs = document.getElementById('recordSearch');
+    if (rs) rs.value = item.payload.section;
+    onRecordSearch();
+  }
+  const input = document.getElementById('globalSearch');
+  if (input) { input.value = ''; input.blur(); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('globalSearch');
+  if (!input) return;
+  input.addEventListener('input', () => renderGlobalResults(runGlobalSearch(input.value)));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!gsResults.length) return;
+      gsActive = (gsActive + (e.key === 'ArrowDown' ? 1 : -1) + gsResults.length) % gsResults.length;
+      highlightGlobalResult();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      runGlobalResult(gsResults[gsActive]);
+    } else if (e.key === 'Escape') {
+      closeGlobalSearch();
+      input.blur();
+    }
+  });
+  document.addEventListener('click', e => {
+    const item = e.target.closest('#globalSearchResults .gsearch-item');
+    if (item) { runGlobalResult(gsResults[+item.dataset.gs]); return; }
+    if (!e.target.closest('.gsearch-wrap')) closeGlobalSearch();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
+});
 
 // ── Init ──────────────────────────────────────────────────────
 loadAll();
