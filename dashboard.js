@@ -4185,6 +4185,48 @@ function populateAwardFilters(data) {
   }
 }
 
+// ── Monthly winners: every award-winning month, newest first ──
+function renderAwardWinners(data, filteredMonths) {
+  const container = document.getElementById('awardWinners');
+  if (!container) return;
+  const winners = data.winnersByMonth || {};
+  const deptFilter = awardFilterState.dept;
+
+  const monthsNewestFirst = filteredMonths.slice().reverse();
+  const groups = monthsNewestFirst
+    .map(m => {
+      const list = (winners[m] || []).filter(w => !deptFilter || w.name === deptFilter);
+      return { month: m, list: list };
+    })
+    .filter(g => g.list.length);
+
+  const totalAwards = groups.reduce((s, g) => s + g.list.length, 0);
+
+  if (!groups.length) {
+    container.innerHTML = `<div class="chart-card"><div class="empty-state" style="padding:24px"><div>No award winners in this period${deptFilter ? ' for ' + deptFilter : ''}</div></div></div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${totalAwards} award(s) across ${groups.length} month(s)</div>
+    ${groups.map(g => {
+      const [y, mm] = g.month.split('-');
+      return `<div class="chart-card" style="margin-bottom:12px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="card-title">${MONTH_NAMES[+mm-1]} ${y}</div>
+          <div style="font-size:11px;color:var(--muted)">${g.list.length} winner(s)</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+          ${g.list.map(w => `<span class="dept-tag" style="background:var(--green-dim);color:var(--green);padding:6px 12px">
+            🏆 ${w.name}
+            ${w.isGroup && w.members.length ? ` <span style="font-weight:400;color:var(--muted)">(${w.members.join(', ')})</span>` : ''}
+            <span style="font-weight:400;color:var(--muted);margin-left:6px">· ${w.clusterLabel}</span>
+          </span>`).join('')}
+        </div>
+      </div>`;
+    }).join('')}`;
+}
+
 function applyAwardFilters() {
   const data = appData.awardData;
   if (!data) return;
@@ -4204,6 +4246,20 @@ function applyAwardFilters() {
 
   updateAwardFilterChips(filteredMonths, allMonths);
   renderAwardKpis(data, filteredMonths);
+
+  // Monthly winners view replaces the cluster cards and heatmap
+  const winnersMode = awardFilterState.viewMode === 'winners';
+  const winnersEl = document.getElementById('awardWinners');
+  const heatmapCard = document.getElementById('awardHeatmap')?.parentElement;
+  if (winnersEl) winnersEl.style.display = winnersMode ? 'block' : 'none';
+  if (heatmapCard) heatmapCard.style.display = winnersMode ? 'none' : '';
+  if (winnersMode) {
+    const clustersEl = document.getElementById('awardClusters');
+    if (clustersEl) clustersEl.innerHTML = '';
+    renderAwardWinners(data, filteredMonths);
+    return;
+  }
+
   renderAwardClusters(data, filteredMonths);
   renderAwardHeatmap(data, filteredMonths);
 }
@@ -4236,6 +4292,7 @@ function updateAwardFilterChips(filteredMonths, allMonths) {
   }
   if (awardFilterState.dept) chips.push(`Dept: ${awardFilterState.dept}`);
   if (awardFilterState.viewMode === 'section') chips.push('View: By Section');
+  if (awardFilterState.viewMode === 'winners') chips.push('View: Monthly winners');
   container.innerHTML = chips.length
     ? chips.map(c => `<span class="filter-chip">${c}</span>`).join('')
     : `<span class="filter-chip dim">Showing all data — no filters applied</span>`;
@@ -4632,6 +4689,30 @@ function exportAwardExcel() {
   if (summaryRows.length) {
     const ws2 = XLSX.utils.json_to_sheet(summaryRows);
     XLSX.utils.book_append_sheet(wb, ws2, 'Monthly Summary');
+  }
+
+  // Monthly winners sheet (respects the period and department filters)
+  const winnerRows = [];
+  Object.entries(data.winnersByMonth || {})
+    .sort((x, y) => x[0].localeCompare(y[0]))
+    .forEach(([m, list]) => {
+      if (fromMonth && m < fromMonth) return;
+      if (toMonth && m > toMonth) return;
+      list.forEach(w => {
+        if (deptFilter && w.name !== deptFilter) return;
+        winnerRows.push({
+          'Month': m,
+          'Winner': w.name,
+          'Members': w.isGroup ? (w.members || []).join(', ') : '',
+          'Scheme': w.clusterLabel,
+          'Rule': w.rule
+        });
+      });
+    });
+  if (winnerRows.length) {
+    const wsW = XLSX.utils.json_to_sheet(winnerRows);
+    wsW['!cols'] = [{wch:10},{wch:24},{wch:50},{wch:30},{wch:50}];
+    XLSX.utils.book_append_sheet(wb, wsW, 'Monthly Winners');
   }
 
   const dateTag = new Date().toISOString().split('T')[0];
