@@ -4406,6 +4406,47 @@ function renderAwardHeatmap(data, filteredMonths) {
   }
 }
 
+// Section rows for a Cluster 1 group, built from the incident rows so every member department appears.
+// Falls back to the backend section list only when raw incident rows are not loaded (demo mode).
+function buildGroupSectionRows(members, data, filteredMonths) {
+  const now = new Date();
+  const currentKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const raw = appData.raw?.data || [];
+  const bucket = {};
+  if (raw.length) {
+    raw.forEach(r => {
+      if (!r['Date']) return;
+      const d = new Date(r['Date']);
+      if (isNaN(d)) return;
+      const dept = (r['Dept'] || '').toString().trim();
+      if (!members.includes(dept)) return;
+      const section = (r['Section'] || '').toString().trim() || 'Unknown';
+      const key = dept + ' | ' + section;
+      const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      if (!bucket[key]) bucket[key] = { dept: dept, section: section, counts: {} };
+      bucket[key].counts[mk] = (bucket[key].counts[mk] || 0) + 1;
+    });
+  } else {
+    Object.values(data.sections || {}).forEach(s => {
+      if (!members.includes(s.dept)) return;
+      const key = s.dept + ' | ' + s.section;
+      bucket[key] = { dept: s.dept, section: s.section, counts: {} };
+      (s.monthStatus || []).forEach(ms => { bucket[key].counts[ms.month] = ms.count; });
+    });
+  }
+  return Object.values(bucket)
+    .sort((a, b) => members.indexOf(a.dept) - members.indexOf(b.dept) || a.section.localeCompare(b.section))
+    .map(b => ({
+      label: '↳ ' + b.section,
+      sublabel: b.dept,
+      isSection: true,
+      cells: filteredMonths.map(m => {
+        const c = b.counts[m] || 0;
+        return { month: m, count: c, zero: c === 0, isCurrent: m === currentKey };
+      })
+    }));
+}
+
 function buildDeptRows(data, filteredMonths, deptFilter) {
   const allDepts = Object.values(data.clusters || {}).flatMap(c => c.departments || []);
   const rows = [];
@@ -4423,23 +4464,12 @@ function buildDeptRows(data, filteredMonths, deptFilter) {
         cells: filteredMonths.map(m => statusMap[m] || { month: m, firstAidCount: null, zeroFirstAid: null, isCurrent: false })
       });
 
-      // Group A only: show the section-wise injury heatmap for its member departments
+      // Section-wise heatmap under each Cluster 1 group: one row per section of every member department
       if ((clusterName === 'Cluster 1A' || clusterName === 'Cluster 1B') && dept.isGroup && dept.members) {
-        const sections = Object.entries(data.sections || {})
-          .filter(([, s]) => dept.members.includes(s.dept))
-          .sort((a, b) => (a[1].dept || '').localeCompare(b[1].dept || '') || (a[1].section || '').localeCompare(b[1].section || ''));
-        if (sections.length) {
+        const sectionRowsForGroup = buildGroupSectionRows(dept.members, data, filteredMonths);
+        if (sectionRowsForGroup.length) {
           rows.push({ subheader: 'Section-wise injury heatmap — ' + dept.department });
-          sections.forEach(([, s]) => {
-            const sMap = {};
-            (s.monthStatus || []).forEach(ms => { sMap[ms.month] = ms; });
-            rows.push({
-              label: '↳ ' + (s.section || ''),
-              sublabel: s.dept,
-              isSection: true,
-              cells: filteredMonths.map(m => sMap[m] || { month: m, count: null, zero: null, isCurrent: false })
-            });
-          });
+          sectionRowsForGroup.forEach(sr => rows.push(sr));
         }
       }
     });
