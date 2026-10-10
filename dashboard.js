@@ -4422,6 +4422,26 @@ function buildDeptRows(data, filteredMonths, deptFilter) {
         sublabel: dept.isGroup && dept.members ? dept.members.join(', ') : '',
         cells: filteredMonths.map(m => statusMap[m] || { month: m, firstAidCount: null, zeroFirstAid: null, isCurrent: false })
       });
+
+      // Group A only: show the section-wise injury heatmap for its member departments
+      if ((clusterName === 'Cluster 1A' || clusterName === 'Cluster 1B') && dept.isGroup && dept.members) {
+        const sections = Object.entries(data.sections || {})
+          .filter(([, s]) => dept.members.includes(s.dept))
+          .sort((a, b) => (a[1].dept || '').localeCompare(b[1].dept || '') || a[0].localeCompare(b[0]));
+        if (sections.length) {
+          rows.push({ subheader: 'Section-wise injury heatmap — ' + dept.department });
+          sections.forEach(([section, s]) => {
+            const sMap = {};
+            (s.monthStatus || []).forEach(ms => { sMap[ms.month] = ms; });
+            rows.push({
+              label: '↳ ' + section,
+              sublabel: s.dept,
+              isSection: true,
+              cells: filteredMonths.map(m => sMap[m] || { month: m, count: null, zero: null, isCurrent: false })
+            });
+          });
+        }
+      }
     });
   });
   return rows;
@@ -4459,6 +4479,9 @@ function renderAwardHeatmapGrid(container, rows) {
   </div>`;
 
   const dataRows = rows.map(row => {
+    if (row.subheader) {
+      return `<div style="margin:10px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">${row.subheader}</div>`;
+    }
     if (row.header) {
       return `<div class="award-heatmap-group-header">
         <span style="font-weight:700;color:var(--text)">${row.header}</span>
@@ -4475,7 +4498,7 @@ function renderAwardHeatmapGrid(container, rows) {
       if (ms.zeroFirstAid ?? ms.zero) return `<div class="award-heatmap-cell zero" title="${ms.month}: ✓ Zero incidents">0</div>`;
       return `<div class="award-heatmap-cell fail" title="${ms.month}: ${count} incident(s)${who}">${count}</div>`;
     }).join('');
-    return `<div class="award-heatmap-row">
+    return `<div class="award-heatmap-row"${row.isSection ? ' style="background:var(--card2)"' : ''}>
       <div class="award-heatmap-label" title="${row.label}">
         ${row.label}${row.sublabel ? `<br><span style="font-size:9px;color:var(--muted);white-space:normal">${row.sublabel}</span>` : ''}
       </div>
@@ -4595,6 +4618,7 @@ function printAwardPdf() {
   }).join('');
 
   const tableRows = rows.map(row => {
+    if (row.subheader) return `<tr><td colspan="${filteredMonths.length + 1}" style="font-weight:700;color:#64748b;text-align:left;border:none;padding-top:10px">${row.subheader}</td></tr>`;
     if (row.header) return `<tr><td colspan="${filteredMonths.length + 1}" style="background:#f1f5f9;font-weight:700;text-align:left">${row.header}${row.rule ? ' — ' + row.rule : ''}</td></tr>`;
     const cells = row.cells.map(ms => {
       const count = ms.firstAidCount ?? ms.count;
