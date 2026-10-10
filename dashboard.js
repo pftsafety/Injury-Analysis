@@ -171,6 +171,7 @@ let charts = {};
 let appData = {};
 
 // ── Nav ──────────────────────────────────────────────────────
+const PRINT_PAGE_CSS = `@page { size: A4; margin: 16mm 12mm; @top-left { content: "SHE — Safety, Health & Environment"; font-size: 9px; color: #64748b; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #64748b; } }`;
 const VIEW_TITLES = { overview:'Dashboard', trends:'Trends', timeanalysis:'Time Analysis', scorecard:'Safety Scorecard', records:'Records', explorer:'Explorer', employee:'Employee Analysis', watchlist:'Watchlist', hospital:'Hospital Reference', deptanalysis:'Department Analysis', award:'Zero First Aid Award', prediction:'AI Prediction' };
 
 function showView(id, btn) {
@@ -182,6 +183,28 @@ function showView(id, btn) {
   closeMobileNav(); // auto-close the drawer after picking a tab on mobile
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
+
+// ── Mobile table cards: label every cell with its column header so tables stack on phones ──
+function applyMobileTableLabels(table) {
+  const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    [...tr.children].forEach((td, i) => {
+      if (td.tagName !== 'TD') return;
+      if (td.colSpan > 1) { td.removeAttribute('data-label'); return; }
+      td.setAttribute('data-label', headers[i] || '');
+    });
+  });
+}
+const mobileLabelObserver = new MutationObserver(muts => {
+  muts.forEach(m => {
+    const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+    const table = el && el.closest ? el.closest('.tbl-wrap table') : null;
+    if (table) applyMobileTableLabels(table);
+  });
+});
+document.addEventListener('DOMContentLoaded', () => {
+  mobileLabelObserver.observe(document.body, { childList: true, subtree: true });
+});
 
 // ── Mobile nav (hamburger drawer) ────────────────────────────
 function toggleMobileNav() {
@@ -427,7 +450,16 @@ function renderKPIs() {
   const prevYearVal = stats.byYear?.[prevYear] || 0;
 
   animateCounter(document.getElementById('kpi-year'), thisYearVal);
-  document.getElementById('kpi-year-label').textContent = `Year ${currentYear}`;
+  const lastKey = monthly.monthly.length ? monthly.monthly[monthly.monthly.length-1].month : '';
+  const cutoffMM = lastKey ? +lastKey.split('-')[1] : 12;
+  const ytdOf = y => (monthly.monthly || [])
+    .filter(m => m.month.startsWith(y + '-') && +m.month.split('-')[1] <= cutoffMM)
+    .reduce((s, m) => s + m.count, 0);
+  const cyYtd = ytdOf(currentYear), pyYtd = ytdOf(String(+currentYear - 1));
+  const yoy = pyYtd ? Math.round((cyYtd - pyYtd) / pyYtd * 100) : null;
+  const deltaHtml = yoy === null ? '' :
+    ` · <span style="color:${yoy > 0 ? 'var(--red)' : 'var(--green)'};font-weight:700">${yoy > 0 ? '▲' : '▼'} ${Math.abs(yoy)}%</span> vs ${+currentYear - 1} (to ${MONTH_NAMES[cutoffMM-1]})`;
+  document.getElementById('kpi-year-label').innerHTML = `Year ${currentYear}${deltaHtml}`;
 
   const avg = monthly.monthly.length ? Math.round(stats.total / monthly.monthly.length) : 0;
   animateCounter(document.getElementById('kpi-avg'), avg);
@@ -952,13 +984,20 @@ function renderHeatmap() {
   const avgs = totals.map((t,i) => counts[i] ? Math.round(t/counts[i]) : 0);
   const maxAvg = Math.max(...avgs, 1);
 
+  let legend = document.getElementById('heatmapLegend');
+  if (!legend) {
+    legend = document.createElement('div');
+    legend.id = 'heatmapLegend';
+    container.parentElement.insertBefore(legend, container);
+  }
+  legend.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap"><span>Lower</span><span style="display:inline-block;width:120px;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(37,99,235,0.18),rgba(220,38,38,0.73))"></span><span>Higher</span><span style="margin-left:auto">Colour = average incidents for that month of the year</span></div>';
   container.innerHTML = avgs.map((v, i) => {
     const intensity = v / maxAvg;
     const r = Math.round(37 + (220-37)*intensity);
     const g = Math.round(99 + (38-99)*intensity);
     const b = Math.round(235 + (38-235)*intensity);
     return `
-      <div class="heat-cell" style="background:rgba(${r},${g},${b},${0.18 + intensity*0.55})" title="${monthNames[i]}: avg ${v} incidents">
+      <div class="heat-cell" style="background:rgba(${r},${g},${b},${0.18 + intensity*0.55})" title="${monthNames[i]}: average ${v} incidents per year, across ${counts[i]} year(s)">
         ${v}
         <span class="heat-month">${monthNames[i]}</span>
       </div>
@@ -1799,8 +1838,8 @@ function renderHospitalKpis(data) {
   const topInjury = (data.byInjuryType || [])[0];
 
   container.innerHTML = `
-    <div class="kpi-card c-red">
-      <div class="kpi-icon c-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+    <div class="kpi-card c-amber">
+      <div class="kpi-icon c-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v8"/><path d="M8 10h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
       <div class="kpi-label">Hospital-Referred Cases</div>
       <div class="kpi-value"><span class="counter">${data.total}</span></div>
       <div class="kpi-sub">Total on record</div>
@@ -1866,7 +1905,7 @@ function renderHospitalTrendChart(data) {
       type: 'bar',
       data: {
         labels: MONTH_NAMES,
-        datasets: [{ data: counts, backgroundColor: '#dc2626', borderRadius: 6, maxBarThickness: 46 }]
+        datasets: [{ data: counts, backgroundColor: '#ea580c', borderRadius: 6, maxBarThickness: 46 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -1896,7 +1935,7 @@ function renderHospitalTrendChart(data) {
     type: 'bar',
     data: {
       labels: years,
-      datasets: [{ data: years.map(y => yearTotals[y]), backgroundColor: '#dc2626', borderRadius: 6, maxBarThickness: 60 }]
+      datasets: [{ data: years.map(y => yearTotals[y]), backgroundColor: '#ea580c', borderRadius: 6, maxBarThickness: 60 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -1963,7 +2002,7 @@ function renderHospitalBodyChart(data) {
   const tally = (data.byBodyPart || []).slice(0, 8);
   charts.hospBody = new Chart(canvas.getContext('2d'), {
     type: 'bar', indexAxis: 'y',
-    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: '#dc2626', borderRadius: 5 }] },
+    data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: '#ea580c', borderRadius: 5 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 700 },
@@ -2063,7 +2102,7 @@ function renderHospitalTable() {
       <td>${r['Name']||'—'}</td>
       <td style="max-width:220px">${r['Description of Incident']||'—'}</td>
       <td>${r['Nature of Incident']||'—'}</td>
-      <td><span class="badge badge-red">${r['Type of Injury']||'—'}</span></td>
+      <td><span class="badge badge-amber">${r['Type of Injury']||'—'}</span></td>
       <td>${r['Affected part']||'—'}</td>
       <td><span class="badge ${genderBadge(r['Gender'])}">${r['Gender']||'—'}</span></td>
       <td>${r['Section']||'—'}</td>
@@ -2529,7 +2568,7 @@ function printRecordsPdf() {
 
   printWindow.document.write(`
     <!DOCTYPE html><html><head><title>SHE Incident Register</title>
-    <style>
+    <style>${PRINT_PAGE_CSS}
       body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
       h1 { font-size: 18px; margin-bottom: 4px; }
       .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
@@ -2602,7 +2641,7 @@ function printWatchlistPdf() {
 
   printWindow.document.write(`
     <!DOCTYPE html><html><head><title>SHE Repeat-Incident Watchlist</title>
-    <style>
+    <style>${PRINT_PAGE_CSS}
       body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
       h1 { font-size: 18px; margin-bottom: 4px; }
       .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
@@ -2679,7 +2718,7 @@ function printHospitalPdf() {
 
   printWindow.document.write(`
     <!DOCTYPE html><html><head><title>SHE Hospital-Referred Cases</title>
-    <style>
+    <style>${PRINT_PAGE_CSS}
       body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
       h1 { font-size: 18px; margin-bottom: 4px; }
       .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
@@ -3661,7 +3700,7 @@ function renderExplorerTrend(filtered) {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 700 },
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false }, datalabels: { display: false } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 16, maxRotation: 0 }, title: axisLabel('Month') },
         y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, title: axisLabel('Incidents') }
@@ -3801,7 +3840,7 @@ function renderExplorerTimeAnalysis(filtered) {
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 600 },
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false }, datalabels: { display: false } },
       scales: {
         x: { grid: { color: GRID }, border: { color: BORDER }, ticks: { maxTicksLimit: 12 } },
         y: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: axisLabel('Incidents') }
@@ -4769,7 +4808,7 @@ function printAwardPdf() {
   if (!printWindow) { alert('Please allow popups to use Print / PDF export.'); return; }
 
   printWindow.document.write(`<!DOCTYPE html><html><head><title>Zero First Aid Award</title>
-  <style>
+  <style>${PRINT_PAGE_CSS}
     body { font-family: Arial, sans-serif; padding: 20px; color: #0f172a; }
     h1 { font-size: 16px; margin-bottom: 4px; }
     .sub { font-size: 10px; color: #64748b; margin-bottom: 16px; }
@@ -5198,7 +5237,7 @@ function printDeptAnalysisPdf() {
   if (!printWindow) { alert('Please allow popups to use Print / PDF export.'); return; }
 
   printWindow.document.write(`<!DOCTYPE html><html><head><title>Department Analysis</title>
-  <style>
+  <style>${PRINT_PAGE_CSS}
     body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
     h1 { font-size: 18px; margin-bottom: 4px; }
     .sub { font-size: 11px; color: #64748b; margin-bottom: 18px; }
