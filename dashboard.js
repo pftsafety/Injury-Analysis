@@ -259,8 +259,21 @@ function setLoadStep(name, state) {
   if (li) li.className = state;
   const total = document.querySelectorAll('#ldSteps li').length;
   const done = document.querySelectorAll('#ldSteps li.done').length;
-  const fill = document.getElementById('ldBarFill');
-  if (fill) fill.style.width = Math.round((done / total) * 100) + '%';
+  const pctEl = document.getElementById('ldPct');
+  if (pctEl) pctEl.textContent = Math.round((done / total) * 100) + '%';
+  const statusEl = document.getElementById('ldStatus');
+  if (statusEl) {
+    const labels = {
+      stats: 'Reading incident totals…',
+      monthly: 'Building trends…',
+      injury: 'Analysing injury types…',
+      raw: 'Loading the full register…',
+      extras: 'Fetching watchlist, hospital cases and awards…'
+    };
+    if (done === total) statusEl.textContent = 'Ready';
+    else if (state === 'active') statusEl.textContent = labels[name] || '';
+    else if (state === 'failed') statusEl.textContent = 'Something went wrong loading ' + (labels[name] || name).toLowerCase();
+  }
 }
 function setLoadNote(text) {
   const n = document.getElementById('ldNote');
@@ -323,7 +336,8 @@ async function loadAll() {
 function finishLoad(loader, refreshBtn) {
   clearTimeout(window.__slowLoadTimer);
   const fill = document.getElementById('ldBarFill');
-  if (fill) fill.style.width = '100%';
+  const pctEnd = document.getElementById('ldPct');
+  if (pctEnd) pctEnd.textContent = '100%';
   setTimeout(() => {
     loader.classList.add('done');
     refreshBtn.classList.remove('spinning');
