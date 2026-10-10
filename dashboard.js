@@ -253,23 +253,54 @@ function animateCounter(el, target, duration = 900) {
   requestAnimationFrame(tick);
 }
 
+// ── Loader progress: each data request is a step; the bar fills as steps finish ──
+function setLoadStep(name, state) {
+  const li = document.querySelector('#ldSteps li[data-step="' + name + '"]');
+  if (li) li.className = state;
+  const total = document.querySelectorAll('#ldSteps li').length;
+  const done = document.querySelectorAll('#ldSteps li.done').length;
+  const fill = document.getElementById('ldBarFill');
+  if (fill) fill.style.width = Math.round((done / total) * 100) + '%';
+}
+function setLoadNote(text) {
+  const n = document.getElementById('ldNote');
+  if (n) n.textContent = text;
+}
+function trackLoadStep(name, promise) {
+  setLoadStep(name, 'active');
+  return promise.then(
+    v => { setLoadStep(name, 'done'); return v; },
+    e => { setLoadStep(name, 'failed'); throw e; }
+  );
+}
+
 // ── Load all ─────────────────────────────────────────────────
 async function loadAll() {
   const loader = document.getElementById('pageLoader');
   const refreshBtn = document.getElementById('refreshBtn');
   refreshBtn.classList.add('spinning');
+  window.__slowLoadTimer = setTimeout(() => {
+    setLoadNote('Still loading the full register. Large sheets can take up to a minute.');
+  }, 12000);
 
   if (APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
     document.getElementById('configBanner').classList.add('show');
+    setLoadNote('Demo mode: connect your Apps Script URL to load live data.');
+    ['stats','monthly','injury','raw','extras'].forEach(s => setLoadStep(s, 'done'));
     loadDemoData();
     finishLoad(loader, refreshBtn);
     return;
   }
 
   try {
-    const [stats, monthly, injury, raw, repeatIncidents, prevMonthSummary, hospitalReferred, awardData] = await Promise.all([
-      api('stats'), api('monthly'), api('injury'), api('raw', 'limit=100000'), api('repeat_incidents'), api('previous_month_summary'), api('hospital_referred'), api('zero_first_aid_award')
+    const [stats, monthly, injury, raw, extras] = await Promise.all([
+      trackLoadStep('stats', api('stats')),
+      trackLoadStep('monthly', api('monthly')),
+      trackLoadStep('injury', api('injury')),
+      trackLoadStep('raw', api('raw', 'limit=100000')),
+      trackLoadStep('extras', Promise.all([api('repeat_incidents'), api('previous_month_summary'), api('hospital_referred'), api('zero_first_aid_award')]))
     ]);
+    const [repeatIncidents, prevMonthSummary, hospitalReferred, awardData] = extras;
     stats.byBodyPart = clusterTally(stats.byBodyPart || {});
     injury.injuryTypes = clusterTally(injury.injuryTypes || {});
     injury.natures = clusterTally(injury.natures || {});
@@ -282,6 +313,7 @@ async function loadAll() {
   } catch (e) {
     console.error(e);
     document.getElementById('configBanner').classList.add('show');
+    setLoadNote('Could not reach the data source. Showing demo data. Check the Apps Script deployment and your connection.');
     loadDemoData();
   } finally {
     finishLoad(loader, refreshBtn);
@@ -289,10 +321,13 @@ async function loadAll() {
 }
 
 function finishLoad(loader, refreshBtn) {
+  clearTimeout(window.__slowLoadTimer);
+  const fill = document.getElementById('ldBarFill');
+  if (fill) fill.style.width = '100%';
   setTimeout(() => {
     loader.classList.add('done');
     refreshBtn.classList.remove('spinning');
-  }, 300);
+  }, 450);
 }
 
 // ── Demo data ────────────────────────────────────────────────
@@ -4466,8 +4501,10 @@ function renderAwardClusters(data, filteredMonths) {
     const rule1 = (cluster1A || cluster1B).rule;
     html += `<div class="chart-card" style="margin-bottom:16px">
       <div class="card-header"><div class="card-title">Cluster 1 — Non-Production</div><div class="card-sub">${rule1}</div></div>
-      ${cluster1A ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:16px 0 8px">Group A — ${cluster1A.departments[0].department}</div>${eligibleLine(cluster1A)}<div class="award-dept-grid">${deptCardsHtml(cluster1A)}</div>` : ''}
-      ${cluster1B ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--border)">Group B — ${cluster1B.departments[0].department}</div>${eligibleLine(cluster1B)}<div class="award-dept-grid">${deptCardsHtml(cluster1B)}</div>` : ''}
+      <div class="award-group-row">
+        ${cluster1A ? `<div class="award-group-col"><div class="award-group-label">Group A — ${cluster1A.departments[0].department}</div>${eligibleLine(cluster1A)}<div class="award-dept-grid">${deptCardsHtml(cluster1A)}</div></div>` : ""}
+        ${cluster1B ? `<div class="award-group-col"><div class="award-group-label">Group B — ${cluster1B.departments[0].department}</div>${eligibleLine(cluster1B)}<div class="award-dept-grid">${deptCardsHtml(cluster1B)}</div></div>` : ""}
+      </div>
     </div>`;
   }
   if (cluster2) {
