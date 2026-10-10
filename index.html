@@ -1171,6 +1171,24 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
   transition: width 1s ease;
 }
 .animated-underline.done::after { width: 100%; }
+
+/* ── Skeleton loading ── */
+.skeleton { background: linear-gradient(90deg, var(--card2) 25%, var(--border) 50%, var(--card2) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; height: 12px; margin: 8px 0; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Mobile: tables become labelled cards ── */
+@media (max-width: 640px) {
+  .tbl-wrap table, .tbl-wrap tbody { display: block; width: 100%; }
+  .tbl-wrap thead { display: none; }
+  .tbl-wrap tr { display: block; background: var(--card2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 6px 12px; }
+  .tbl-wrap td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border: none !important; padding: 6px 0; text-align: right; }
+  .tbl-wrap td::before { content: attr(data-label); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); text-align: left; flex-shrink: 0; }
+  .tbl-wrap td[colspan] { display: block; text-align: center; }
+  .tbl-wrap td[colspan]::before { content: none; }
+}
+
+/* ── Printing: running header and page numbers ── */
+@page { size: A4; margin: 16mm 12mm; @top-left { content: "SHE — Safety, Health & Environment"; font-size: 9px; color: #64748b; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #64748b; } }
 </style>
 </head>
 <body>
@@ -1644,7 +1662,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
                 </tr>
               </thead>
               <tbody id="recordsTbody">
-                <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+                <tr><td colspan="10" style="padding:14px 16px"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:65%"></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -2059,7 +2077,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
                 </tr>
               </thead>
               <tbody id="wlTableBody">
-                <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+                <tr><td colspan="10" style="padding:14px 16px"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:65%"></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -2178,7 +2196,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
                 </tr>
               </thead>
               <tbody id="hospTableBody">
-                <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+                <tr><td colspan="10" style="padding:14px 16px"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:65%"></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -2297,7 +2315,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
                 <tr><th>Department</th><th>Total</th><th>% of Period</th><th>Top Injury Type</th><th>Top Body Part</th><th>Male</th><th>Female</th></tr>
               </thead>
               <tbody id="daTableBody">
-                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Loading…</td></tr>
+                <tr><td colspan="7" style="padding:14px 16px"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:65%"></div></td></tr>
               </tbody>
             </table>
           </div>
