@@ -1068,51 +1068,42 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 
 /* ── Page loader ── */
 #pageLoader {
-  position: fixed; inset: 0;
-  background: var(--bg);
+  position: fixed; inset: 0; z-index: 999; padding: 24px;
   display: flex; align-items: center; justify-content: center;
-  z-index: 999; padding: 20px;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 38%, rgba(37,99,235,0.12), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 85%, rgba(124,58,237,0.10), transparent 70%),
+    var(--bg);
 }
-#pageLoader .ld-card {
-  width: 100%; max-width: 360px;
-  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-  padding: 28px 26px; box-shadow: var(--shadow-md); text-align: center;
+.ld-center { text-align: center; width: 100%; max-width: 420px; }
+.ld-orb { position: relative; width: 120px; height: 120px; margin: 0 auto 28px; }
+.ld-orb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--cyan), var(--purple), transparent 75%);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
+          mask: radial-gradient(circle, transparent 60%, #000 61%);
+  animation: spin 1.6s linear infinite;
 }
-.ld-mark {
-  width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 14px;
-  background: linear-gradient(135deg, var(--cyan), var(--purple));
-  color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.04em;
+.ld-orb-core {
+  position: absolute; inset: 16px; border-radius: 50%;
+  background: var(--card); box-shadow: 0 12px 32px var(--cyan-glow);
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 20px var(--cyan-glow);
+  font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 0.06em; color: var(--text);
 }
-.ld-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--text); }
-.ld-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.ld-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 22px 0 16px; }
-.ld-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--purple)); border-radius: 3px; transition: width 0.4s ease; }
-.ld-steps { list-style: none; text-align: left; margin: 0; padding: 0; }
-.ld-steps li {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 12px; color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--border);
-  transition: color 0.2s;
+.ld-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+.ld-status { font-size: 13px; color: var(--muted); margin-top: 6px; min-height: 18px; }
+.ld-pct {
+  font-family: var(--font-mono); font-size: 36px; font-weight: 700; margin: 24px 0 14px;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
-.ld-steps li:last-child { border-bottom: none; }
-.ld-steps li::before {
-  content: ''; width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
-  border: 2px solid var(--border2);
-}
-.ld-steps li.active { color: var(--text); }
-.ld-steps li.active::before { border-color: var(--cyan); border-top-color: transparent; animation: spin 0.8s linear infinite; }
-.ld-steps li.done { color: var(--text); }
-.ld-steps li.done::before {
-  content: '✓'; background: var(--green); border-color: var(--green); color: #fff;
-  font-size: 10px; font-weight: 700; line-height: 12px; text-align: center; animation: none;
-}
-.ld-steps li.failed { color: var(--red); }
-.ld-steps li.failed::before {
-  content: '!'; background: var(--red); border-color: var(--red); color: #fff;
-  font-size: 10px; font-weight: 700; line-height: 12px; text-align: center; animation: none;
-}
-.ld-note { font-size: 11px; color: var(--muted); margin-top: 14px; min-height: 14px; line-height: 1.5; }
+.ld-segs { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.ld-segs li { flex: 1; height: 6px; border-radius: 3px; background: var(--border); transition: background 0.4s ease; }
+.ld-segs li.active { background: var(--cyan); animation: ldPulse 1s ease-in-out infinite; }
+.ld-segs li.done { background: linear-gradient(90deg, var(--cyan), var(--purple)); animation: none; }
+.ld-segs li.failed { background: var(--red); animation: none; }
+@keyframes ldPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+.ld-note { font-size: 11px; color: var(--muted); margin-top: 18px; min-height: 14px; line-height: 1.5; }
 #pageLoader.done { animation: fadeOut 0.4s forwards; }
 @keyframes fadeOut { to { opacity: 0; pointer-events: none; } }
 
@@ -1224,17 +1215,17 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 
 <!-- Page Loader -->
 <div id="pageLoader">
-  <div class="ld-card">
-    <div class="ld-mark">SHE</div>
+  <div class="ld-center">
+    <div class="ld-orb"><div class="ld-orb-ring"></div><div class="ld-orb-core">SHE</div></div>
     <div class="ld-title">Injury Intelligence</div>
-    <div class="ld-sub">Preparing your dashboard</div>
-    <div class="ld-bar"><div class="ld-bar-fill" id="ldBarFill"></div></div>
-    <ul class="ld-steps" id="ldSteps">
-      <li data-step="stats">Incident totals and departments</li>
-      <li data-step="monthly">Monthly and yearly trends</li>
-      <li data-step="injury">Injury and nature breakdown</li>
-      <li data-step="raw">Full incident register</li>
-      <li data-step="extras">Watchlist, hospital cases and awards</li>
+    <div class="ld-status" id="ldStatus">Connecting to your register…</div>
+    <div class="ld-pct" id="ldPct">0%</div>
+    <ul class="ld-segs" id="ldSteps">
+      <li data-step="stats"></li>
+      <li data-step="monthly"></li>
+      <li data-step="injury"></li>
+      <li data-step="raw"></li>
+      <li data-step="extras"></li>
     </ul>
     <div class="ld-note" id="ldNote"></div>
   </div>
