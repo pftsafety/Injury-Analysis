@@ -783,7 +783,12 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .emp-suggestion-count { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--red); background: var(--red-dim); padding: 2px 7px; border-radius: 20px; }
 
 /* ── Zero First Aid Award ── */
-.award-dept-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+.award-dept-grid { display: flex; flex-wrap: nowrap; gap: 12px; margin-top: 14px; overflow-x: auto; padding-bottom: 4px; }
+.award-dept-grid > .award-dept-card { flex: 0 0 220px; }
+.award-group-row { display: flex; flex-wrap: nowrap; gap: 24px; overflow-x: auto; align-items: flex-start; }
+.award-group-col { flex: 0 0 auto; min-width: 240px; }
+.award-group-col .award-dept-grid { margin-top: 8px; }
+.award-group-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 16px 0 4px; }
 .award-dept-card { background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; transition: box-shadow 0.2s; }
 .award-dept-card.award-eligible { background: var(--green-dim); border-color: rgba(5,150,105,0.25); }
 .award-dept-card:hover { box-shadow: var(--shadow-md); }
@@ -808,7 +813,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 .award-heatmap-cell.na { background: var(--border); color: var(--muted); }
 .award-heatmap-group-header { margin-top: 14px; padding: 8px 10px; background: var(--card2); border-left: 3px solid var(--cyan); border-radius: 6px; font-size: 12px; }
 .award-heatmap-group-header:first-child { margin-top: 0; }
-@media (max-width: 640px) { .award-dept-grid { grid-template-columns: 1fr; } .award-heatmap-label { width: 90px; min-width: 90px; } .award-heatmap-cell { width: 22px; min-width: 22px; height: 22px; font-size: 9px; } }
+@media (max-width: 640px) { .award-dept-grid { flex-wrap: nowrap; } .award-heatmap-label { width: 90px; min-width: 90px; } .award-heatmap-cell { width: 22px; min-width: 22px; height: 22px; font-size: 9px; } }
 #printOnlyHeader { display: none; }
 @media print {
   /* Hide all interactive chrome */
@@ -1065,25 +1070,49 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 #pageLoader {
   position: fixed; inset: 0;
   background: var(--bg);
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  z-index: 999; gap: 14px;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999; padding: 20px;
 }
-#pageLoader .load-ring {
-  width: 40px; height: 40px; border-radius: 50%;
-  border: 2px solid var(--border);
-  border-top-color: var(--cyan);
-  animation: spin 0.8s linear infinite;
+#pageLoader .ld-card {
+  width: 100%; max-width: 360px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  padding: 28px 26px; box-shadow: var(--shadow-md); text-align: center;
 }
-.load-brand {
-  font-family: var(--font-display);
-  font-size: 20px; font-weight: 700;
+.ld-mark {
+  width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 14px;
   background: linear-gradient(135deg, var(--cyan), var(--purple));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.04em;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 20px var(--cyan-glow);
 }
-.load-sub { font-size: 12px; color: var(--muted); }
+.ld-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--text); }
+.ld-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.ld-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 22px 0 16px; }
+.ld-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--purple)); border-radius: 3px; transition: width 0.4s ease; }
+.ld-steps { list-style: none; text-align: left; margin: 0; padding: 0; }
+.ld-steps li {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--border);
+  transition: color 0.2s;
+}
+.ld-steps li:last-child { border-bottom: none; }
+.ld-steps li::before {
+  content: ''; width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--border2);
+}
+.ld-steps li.active { color: var(--text); }
+.ld-steps li.active::before { border-color: var(--cyan); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+.ld-steps li.done { color: var(--text); }
+.ld-steps li.done::before {
+  content: '✓'; background: var(--green); border-color: var(--green); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 12px; text-align: center; animation: none;
+}
+.ld-steps li.failed { color: var(--red); }
+.ld-steps li.failed::before {
+  content: '!'; background: var(--red); border-color: var(--red); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 12px; text-align: center; animation: none;
+}
+.ld-note { font-size: 11px; color: var(--muted); margin-top: 14px; min-height: 14px; line-height: 1.5; }
 #pageLoader.done { animation: fadeOut 0.4s forwards; }
 @keyframes fadeOut { to { opacity: 0; pointer-events: none; } }
 
@@ -1195,9 +1224,20 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 
 <!-- Page Loader -->
 <div id="pageLoader">
-  <div class="load-ring"></div>
-  <div class="load-brand">SHE Injury Analytics</div>
-  <div class="load-sub">Loading incident intelligence…</div>
+  <div class="ld-card">
+    <div class="ld-mark">SHE</div>
+    <div class="ld-title">Injury Intelligence</div>
+    <div class="ld-sub">Preparing your dashboard</div>
+    <div class="ld-bar"><div class="ld-bar-fill" id="ldBarFill"></div></div>
+    <ul class="ld-steps" id="ldSteps">
+      <li data-step="stats">Incident totals and departments</li>
+      <li data-step="monthly">Monthly and yearly trends</li>
+      <li data-step="injury">Injury and nature breakdown</li>
+      <li data-step="raw">Full incident register</li>
+      <li data-step="extras">Watchlist, hospital cases and awards</li>
+    </ul>
+    <div class="ld-note" id="ldNote"></div>
+  </div>
 </div>
 
 <div class="shell">
