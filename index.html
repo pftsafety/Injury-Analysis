@@ -2332,8 +2332,8 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
           <div class="chart-card">
             <div class="card-header">
-              <div class="card-title">Department share</div>
-              <div class="card-sub">Proportion of total incidents</div>
+              <div class="card-title" id="daShareTitle">Department share</div>
+              <div class="card-sub" id="daShareSub">Proportion of total incidents</div>
             </div>
             <div class="chart-wrap" style="height:320px">
               <canvas id="daShareChart"></canvas>
@@ -2360,6 +2360,38 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
           <div class="chart-wrap" style="height:280px">
             <canvas id="daGenderChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Type of injury, time analysis and insights -->
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Type of injury</div><div class="card-sub">Distribution in the selected period</div></div>
+            <div class="chart-wrap" style="height:280px"><canvas id="daInjuryChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Nature of incident</div><div class="card-sub">How incidents occurred</div></div>
+            <div class="chart-wrap" style="height:280px"><canvas id="daNatureChart"></canvas></div>
+          </div>
+        </div>
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Affected body part</div><div class="card-sub">Most affected body parts</div></div>
+            <div class="chart-wrap" style="height:280px"><canvas id="daBodyChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Key insights</div><div class="card-sub">Written from the selected period and department</div></div>
+            <div id="daInsights" class="review-insight-text" style="min-height:200px"></div>
+          </div>
+        </div>
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Time of day</div><div class="card-sub">Incidents by hour (time analysis)</div></div>
+            <div class="chart-wrap" style="height:240px"><canvas id="daHourChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Day of week</div><div class="card-sub">Incidents by weekday (time analysis)</div></div>
+            <div class="chart-wrap" style="height:240px"><canvas id="daDowChart"></canvas></div>
           </div>
         </div>
 
