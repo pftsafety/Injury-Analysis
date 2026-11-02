@@ -5224,34 +5224,31 @@ function renderDeptAnalysisGender(filtered) {
   if (!canvas) return;
   if (charts.daGender) charts.daGender.destroy();
 
-  const deptTally = tallyRows(filtered, 'Dept').slice(0, 8).map(([k]) => k);
-  const maleData = [], femaleData = [], otherData = [];
-  deptTally.forEach(dept => {
-    let male = 0, female = 0, other = 0;
-    filtered.forEach(r => {
-      if ((r['Dept']||'').toString().trim() !== dept) return;
-      const g = (r['Gender']||'').toString().trim();
-      if (g === 'Male') male++; else if (g === 'Female') female++; else other++;
-    });
-    maleData.push(male); femaleData.push(female); otherData.push(other);
-  });
+  const count = g => filtered.filter(r => (r['Gender'] || '').toString().trim() === g).length;
+  const male = count('Male');
+  const female = count('Female');
+  const other = filtered.length - male - female;
+  const parts = [['Male', male, '#2563eb'], ['Female', female, '#db2777']];
+  if (other > 0) parts.push(['Other / unknown', other, '#94a3b8']);
 
-  const datasets = [
-    { label: 'Male', data: maleData, backgroundColor: '#2563eb', borderRadius: 4 },
-    { label: 'Female', data: femaleData, backgroundColor: '#db2777', borderRadius: 4 }
-  ];
-  if (otherData.some(v => v > 0)) datasets.push({ label: 'Other/Unknown', data: otherData, backgroundColor: '#94a3b8', borderRadius: 4 });
+  const sub = document.getElementById('daGenderSub');
+  if (sub) sub.textContent = filtered.length
+    ? male + ' male · ' + female + ' female' + (other ? ' · ' + other + ' other' : '') + ' in the selected period'
+    : 'No incidents in the selected period';
 
   charts.daGender = new Chart(canvas.getContext('2d'), {
-    type: 'bar',
-    data: { labels: deptTally, datasets },
+    type: 'doughnut',
+    data: {
+      labels: parts.map(p => p[0]),
+      datasets: [{ data: parts.map(p => p[1]), backgroundColor: parts.map(p => p[2]), borderWidth: 0, hoverOffset: 6 }]
+    },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      animation: { duration: 700 },
-      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 12, boxHeight: 12, color: '#475569', font: { size: 11 } } } },
-      scales: {
-        x: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, ticks: { maxRotation: 30 } },
-        y: { stacked: true, grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 } }
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      animation: { animateRotate: true, duration: 700 },
+      plugins: {
+        legend: { display: true, position: 'right', labels: { boxWidth: 10, padding: 12, font: { size: 11 }, color: '#475569' } },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + ' (' + Math.round((ctx.parsed / filtered.length) * 1000) / 10 + '%)' } }
       }
     }
   });
