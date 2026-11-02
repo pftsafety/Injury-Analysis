@@ -4249,6 +4249,22 @@ const DEMO_ACCURACY = {
 // ── Zero First Aid Award — Filter State ───────────────────────
 let awardFilterState = { fromMonth: '', toMonth: '', dept: '', viewMode: 'dept' };
 
+// Streak and eligibility for a period: the count restarts after each award
+function awardStateFor(monthStatus, filteredMonths, required) {
+  const completed = (monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent);
+  let run = 0, lastAward = null;
+  completed.forEach(ms => {
+    if (ms.zeroFirstAid) {
+      run++;
+      if (run >= required) { lastAward = ms.month; run = 0; }
+    } else {
+      run = 0;
+    }
+  });
+  const last = completed[completed.length - 1];
+  return { streak: run, eligible: !!last && lastAward === last.month, lastAward };
+}
+
 function renderAwardView() {
   const data = appData.awardData;
   const emptyState = document.getElementById('awardEmpty');
@@ -4421,7 +4437,7 @@ function renderAwardKpis(data, filteredMonths) {
   const totalMonths = visibleDepts.reduce((s, dept) => {
     return s + (dept.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent).length;
   }, 0);
-  const eligible = visibleDepts.filter(d => d.isCurrentlyEligible).length;
+  const eligible = visibleDepts.filter(d => awardStateFor(d.monthStatus, filteredMonths, d.streakRequired).eligible).length;
   const topStreak = visibleDepts.slice().sort((a,b) => b.longestStreak - a.longestStreak)[0];
 
   const zeroPct = totalMonths ? Math.round((zeroMonths / totalMonths) * 100) : 0;
@@ -4471,14 +4487,10 @@ function renderAwardClusters(data, filteredMonths) {
 
   function deptCardsHtml(cluster) {
     return (cluster.departments || []).map(dept => {
-      // Recalculate streak based on filtered months only
       const completedFiltered = (dept.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent);
-      let streak = 0;
-      for (let i = completedFiltered.length - 1; i >= 0; i--) {
-        if (completedFiltered[i].zeroFirstAid) streak++;
-        else break;
-      }
-      const eligible = streak >= dept.streakRequired;
+      const st = awardStateFor(dept.monthStatus, filteredMonths, dept.streakRequired);
+      const streak = st.streak;
+      const eligible = st.eligible;
       const streakPct = Math.min(100, Math.round((streak / dept.streakRequired) * 100));
 
       // For group entries: list members, and name the member(s) that broke the most recent zero streak
@@ -4517,15 +4529,9 @@ function renderAwardClusters(data, filteredMonths) {
   }
 
   function eligibleLine(cluster) {
-    const currentlyEligible = (cluster.departments || []).filter(d => {
-      const completed = (d.monthStatus || []).filter(ms => filteredMonths.includes(ms.month) && !ms.isCurrent);
-      let streak = 0;
-      for (let i = completed.length - 1; i >= 0; i--) {
-        if (completed[i].zeroFirstAid) streak++;
-        else break;
-      }
-      return streak >= d.streakRequired;
-    }).map(d => d.department);
+    const currentlyEligible = (cluster.departments || [])
+      .filter(d => awardStateFor(d.monthStatus, filteredMonths, d.streakRequired).eligible)
+      .map(d => d.department);
     return currentlyEligible.length
       ? `<div style="font-size:11px;font-weight:600;color:var(--green);margin-top:4px">✓ ${currentlyEligible.join(', ')} eligible</div>`
       : `<div style="font-size:11px;color:var(--muted);margin-top:4px">No departments eligible in this period</div>`;
@@ -4646,7 +4652,7 @@ function buildDeptRows(data, filteredMonths, deptFilter) {
       rows.push({
         label: dept.department,
         sublabel: dept.isGroup && dept.members ? dept.members.join(', ') : '',
-        cells: filteredMonths.map(m => statusMap[m] || { month: m, firstAidCount: null, zeroFirstAid: null, isCurrent: false })
+        cells: filteredMonths.map(m => ({ ...(statusMap[m] || { month: m, firstAidCount: null, zeroFirstAid: null, isCurrent: false }), isAward: (dept.awardMonths || []).includes(m) }))
       });
 
       // Section-wise heatmap under each Cluster 1 group: one row per section of every member department
@@ -4711,7 +4717,7 @@ function renderAwardHeatmapGrid(container, rows) {
         : '';
       if (count === null || count === undefined) return `<div class="award-heatmap-cell na" title="${ms.month}: No data">–</div>`;
       if (ms.isCurrent) return `<div class="award-heatmap-cell current" title="${ms.month}: Current month">${count}</div>`;
-      if (ms.zeroFirstAid ?? ms.zero) return `<div class="award-heatmap-cell zero" title="${ms.month}: ✓ Zero incidents">0</div>`;
+      if (ms.zeroFirstAid ?? ms.zero) return `<div class="award-heatmap-cell zero${ms.isAward ? ' won' : ''}" title="${ms.month}: ✓ Zero incidents${ms.isAward ? ' · award won' : ''}">0</div>`;
       return `<div class="award-heatmap-cell fail" title="${ms.month}: ${count} incident(s)${who}">${count}</div>`;
     }).join('');
     return `<div class="award-heatmap-row"${row.isSection ? ' style="background:var(--card2)"' : ''}>
