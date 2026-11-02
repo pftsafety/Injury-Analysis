@@ -1217,6 +1217,8 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
 @media (max-width: 900px) { #globalSearch { width: 150px; } .gsearch-results { width: 300px; } }
 @media (max-width: 640px) { .gsearch-wrap { display: none; } }
 
+.da-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 20px 0 10px; }
+
 /* ── Skeleton loading ── */
 .skeleton { background: linear-gradient(90deg, var(--card2) 25%, var(--border) 50%, var(--card2) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; height: 12px; margin: 8px 0; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
@@ -2316,10 +2318,19 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           <div class="explorer-active-chips" id="daFilterChips"></div>
         </div>
 
-        <!-- KPIs -->
+                <div class="da-section-label">Overview</div>
+<!-- KPIs -->
         <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px" id="daKpiRow"></div>
 
-        <!-- Ranking + Share -->
+                <div class="da-section-label">At a glance</div>
+        <div style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Key insights</div><div class="card-sub">Written from the selected period and department</div></div>
+            <div id="daInsights" class="review-insight-text" style="min-height:120px"></div>
+          </div>
+        </div>
+        <div class="da-section-label">Department comparison</div>
+<!-- Ranking + Share -->
         <div class="chart-grid grid-2" style="margin-bottom:16px">
           <div class="chart-card">
             <div class="card-header">
@@ -2341,7 +2352,8 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
         </div>
 
-        <!-- Monthly trend -->
+                <div class="da-section-label">Trend over time</div>
+<!-- Monthly trend -->
         <div class="chart-card" style="margin-bottom:16px">
           <div class="card-header">
             <div class="card-title">Department monthly trend</div>
@@ -2352,18 +2364,7 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
           </div>
         </div>
 
-        <!-- Dept x Gender -->
-        <div class="chart-card" style="margin-bottom:16px">
-          <div class="card-header">
-            <div class="card-title">Department × Gender</div>
-            <div class="card-sub">Male vs female incidents per department</div>
-          </div>
-          <div class="chart-wrap" style="height:280px">
-            <canvas id="daGenderChart"></canvas>
-          </div>
-        </div>
-
-        <!-- Type of injury, time analysis and insights -->
+                <div class="da-section-label">Injury profile</div>
         <div class="chart-grid grid-2" style="margin-bottom:16px">
           <div class="chart-card">
             <div class="card-header"><div class="card-title">Type of injury</div><div class="card-sub">Distribution in the selected period</div></div>
@@ -2379,23 +2380,32 @@ tbody tr:hover td { background: rgba(15,23,42,0.025); }
             <div class="card-header"><div class="card-title">Affected body part</div><div class="card-sub">Most affected body parts</div></div>
             <div class="chart-wrap" style="height:280px"><canvas id="daBodyChart"></canvas></div>
           </div>
-          <div class="chart-card">
-            <div class="card-header"><div class="card-title">Key insights</div><div class="card-sub">Written from the selected period and department</div></div>
-            <div id="daInsights" class="review-insight-text" style="min-height:200px"></div>
+<!-- Dept x Gender -->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="card-header">
+            <div class="card-title">Gender split</div>
+            <div class="card-sub" id="daGenderSub">Male, female and other in the selected period</div>
           </div>
-        </div>
-        <div class="chart-grid grid-2" style="margin-bottom:16px">
-          <div class="chart-card">
-            <div class="card-header"><div class="card-title">Time of day</div><div class="card-sub">Incidents by hour (time analysis)</div></div>
-            <div class="chart-wrap" style="height:240px"><canvas id="daHourChart"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <div class="card-header"><div class="card-title">Day of week</div><div class="card-sub">Incidents by weekday (time analysis)</div></div>
-            <div class="chart-wrap" style="height:240px"><canvas id="daDowChart"></canvas></div>
+          <div class="chart-wrap" style="height:280px">
+            <canvas id="daGenderChart"></canvas>
           </div>
         </div>
 
-        <!-- Summary table -->
+        
+        </div>
+        <div class="da-section-label">Time analysis</div>
+        <div class="chart-grid grid-2" style="margin-bottom:16px">
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Time of day</div><div class="card-sub">Incidents by hour</div></div>
+            <div class="chart-wrap" style="height:240px"><canvas id="daHourChart"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="card-header"><div class="card-title">Day of week</div><div class="card-sub">Incidents by weekday</div></div>
+            <div class="chart-wrap" style="height:240px"><canvas id="daDowChart"></canvas></div>
+          </div>
+        </div>
+        <div class="da-section-label">Department summary</div>
+<!-- Summary table -->
         <div class="chart-card">
           <div class="card-header">
             <div class="card-title">Department summary table</div>
