@@ -5036,6 +5036,7 @@ function applyDeptAnalysisFilters() {
   renderDeptAnalysisShare(filtered);
   renderDeptAnalysisTrend(filtered);
   renderDeptAnalysisGender(filtered);
+  renderDeptInsights(filtered);
   renderDeptAnalysisTable(filtered);
 }
 
@@ -5056,7 +5057,9 @@ function updateDeptAnalysisChips() {
 }
 
 function clearDeptAnalysisCharts() {
-  ['daRanking','daShare','daTrend','daGender'].forEach(k => {
+  const insightsBox = document.getElementById('daInsights');
+  if (insightsBox) insightsBox.innerHTML = '';
+  ['daRanking','daShare','daTrend','daGender','daInjury','daNature','daBody','daHour','daDow'].forEach(k => {
     if (charts[k]) { charts[k].destroy(); delete charts[k]; }
   });
 }
@@ -5137,7 +5140,12 @@ function renderDeptAnalysisShare(filtered) {
   const canvas = document.getElementById('daShareChart');
   if (!canvas) return;
   if (charts.daShare) charts.daShare.destroy();
-  const tally = tallyRows(filtered, 'Dept');
+  const selectedDept = deptAnalysisState.dept;
+  const titleEl = document.getElementById('daShareTitle');
+  const subEl = document.getElementById('daShareSub');
+  const tally = selectedDept ? tallyRows(filtered, 'Section') : tallyRows(filtered, 'Dept');
+  if (titleEl) titleEl.textContent = selectedDept ? 'Section share — ' + selectedDept : 'Department share';
+  if (subEl) subEl.textContent = selectedDept ? 'Sections within ' + selectedDept + ' in the selected period' : 'Proportion of total incidents';
   charts.daShare = new Chart(canvas.getContext('2d'), {
     type: 'doughnut',
     data: { labels: tally.map(([k])=>k), datasets: [{ data: tally.map(([,v])=>v), backgroundColor: COLORS.slice(0, tally.length||1), borderWidth: 0, hoverOffset: 6 }] },
@@ -5276,6 +5284,118 @@ function renderDeptAnalysisTable(filtered) {
     `;
   }).join('');
   appendDaysSinceColumn(tbody);
+}
+
+// ── Type of injury, time analysis and insights for the selected period ──
+function renderDeptInsights(filtered) {
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const n = filtered.length;
+  const pct = v => (n ? Math.round((v / n) * 1000) / 10 : 0);
+
+  // Charts
+  const barChart = (key, canvasId, labels, data, color, horizontal, axisTitle) => {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (charts[key]) charts[key].destroy();
+    charts[key] = new Chart(canvas.getContext('2d'), {
+      type: 'bar', indexAxis: horizontal ? 'y' : 'x',
+      data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 5, maxBarThickness: 40 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 600 },
+        plugins: { legend: { display: false }, datalabels: { display: false } },
+        scales: {
+          x: { grid: { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: horizontal ? axisLabel('Incidents') : axisLabel(axisTitle) },
+          y: { grid: horizontal ? { display: false } : { color: GRID }, border: { color: BORDER }, beginAtZero: true, ticks: { precision: 0 }, title: horizontal ? undefined : axisLabel('Incidents') }
+        }
+      }
+    });
+  };
+
+  const inj = tallyRows(filtered, 'Type of Injury').slice(0, 8);
+  const injCanvas = document.getElementById('daInjuryChart');
+  if (injCanvas) {
+    if (charts.daInjury) charts.daInjury.destroy();
+    charts.daInjury = new Chart(injCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: { labels: inj.map(([k]) => k), datasets: [{ data: inj.map(([, v]) => v), backgroundColor: COLORS.slice(0, inj.length || 1), borderWidth: 0, hoverOffset: 6 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '60%',
+        animation: { animateRotate: true, duration: 700 },
+        plugins: { legend: { display: true, position: 'right', labels: { boxWidth: 8, padding: 8, font: { size: 10 }, color: '#475569' } }, datalabels: { display: false } }
+      }
+    });
+  }
+
+  const nat = tallyRows(filtered, 'Nature of Incident').slice(0, 8);
+  barChart('daNature', 'daNatureChart', nat.map(([k]) => k), nat.map(([, v]) => v), '#d97706', true);
+
+  const body = tallyRows(filtered, 'Affected part').slice(0, 8);
+  barChart('daBody', 'daBodyChart', body.map(([k]) => k), body.map(([, v]) => v), '#7c3aed', true);
+
+  const hours = new Array(24).fill(0);
+  const dow = new Array(7).fill(0);
+  filtered.forEach(r => {
+    const hr = parseHour(r['Time']);
+    if (hr !== null) hours[hr]++;
+    const dt = new Date(r['Date']);
+    if (!isNaN(dt)) dow[dt.getDay()]++;
+  });
+  barChart('daHour', 'daHourChart', hours.map((_, i) => i + ':00'), hours, '#2563eb', false, 'Hour of day');
+  barChart('daDow', 'daDowChart', dayNames.map(x => x.slice(0, 3)), dow, '#059669', false, 'Day of week');
+
+  // Insights, written from the same numbers
+  const lines = [];
+  const top = field => tallyRows(filtered, field)[0];
+  const sec = top('Section');
+  if (sec) lines.push('Most incidents are in section <b>' + escHtml(sec[0]) + '</b> (' + sec[1] + ', ' + pct(sec[1]) + '%).');
+  const injTop = top('Type of Injury');
+  if (injTop) lines.push('Most common injury type: <b>' + escHtml(injTop[0]) + '</b> (' + injTop[1] + ').');
+  const bodyTop = top('Affected part');
+  if (bodyTop) lines.push('Most affected body part: <b>' + escHtml(bodyTop[0]) + '</b> (' + bodyTop[1] + ').');
+  const natTop = top('Nature of Incident');
+  if (natTop) lines.push('Most common nature of incident: <b>' + escHtml(natTop[0]) + '</b> (' + natTop[1] + ').');
+
+  const maxDow = Math.max(...dow);
+  if (maxDow > 0) lines.push('Peak weekday: <b>' + dayNames[dow.indexOf(maxDow)] + '</b> (' + maxDow + ' incident(s)).');
+  const maxHr = Math.max(...hours);
+  if (maxHr > 0) {
+    const hr = hours.indexOf(maxHr);
+    lines.push('Peak hour: <b>' + String(hr).padStart(2, '0') + ':00–' + String(hr + 1).padStart(2, '0') + ':00</b> (' + maxHr + ' incident(s)).');
+  }
+
+  const male = filtered.filter(r => (r['Gender'] || '').toString().trim() === 'Male').length;
+  const female = filtered.filter(r => (r['Gender'] || '').toString().trim() === 'Female').length;
+  if (male + female > 0) lines.push('Gender split: ' + male + ' male (' + pct(male) + '%), ' + female + ' female (' + pct(female) + '%).');
+
+  const hospital = filtered.filter(r => r['_hospitalReferred']).length;
+  if (hospital > 0) lines.push('<b>' + hospital + '</b> of ' + n + ' (' + pct(hospital) + '%) were hospital-referred.');
+
+  const monthCounts = {};
+  filtered.forEach(r => {
+    const dt = new Date(r['Date']);
+    if (isNaN(dt)) return;
+    const key = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+    monthCounts[key] = (monthCounts[key] || 0) + 1;
+  });
+  const months = Object.keys(monthCounts).sort();
+  if (months.length) lines.push('Average of ' + (Math.round((n / months.length) * 10) / 10) + ' incident(s) per month across ' + months.length + ' month(s).');
+  if (months.length >= 2) {
+    const last = monthCounts[months[months.length - 1]];
+    const prev = monthCounts[months[months.length - 2]];
+    if (prev > 0) {
+      const change = Math.round(((last - prev) / prev) * 100);
+      lines.push('Latest month (' + months[months.length - 1] + ') has ' + last + ' incident(s), ' +
+        (change === 0 ? 'unchanged from' : change > 0 ? 'up ' + change + '% from' : 'down ' + Math.abs(change) + '% from') + ' the month before (' + prev + ').');
+    }
+  }
+
+  const box = document.getElementById('daInsights');
+  if (box) {
+    box.innerHTML = lines.length
+      ? '<ul style="margin:0;padding-left:18px;line-height:1.7">' + lines.map(l => '<li>' + l + '</li>').join('') + '</ul>'
+      : 'Not enough data in this selection for insights.';
+  }
 }
 
 // ── Department Analysis Export: Excel ────────────────────────────
