@@ -3284,7 +3284,8 @@ async function sendReport() {
   const sendBtn = document.getElementById('sendEmailBtn');
 
   if (!to) { setEmailStatus('error', '⚠ Please enter a recipient email address.'); return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { setEmailStatus('error', '⚠ Please enter a valid email address.'); return; }
+  const addrs = to.split(',').map(s => s.trim()).filter(Boolean);
+  if (!addrs.length || addrs.some(a => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a))) { setEmailStatus('error', '⚠ Please enter valid email address(es), separated by commas.'); return; }
 
   if (APPS_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
     setEmailStatus('success', '✓ Demo mode — email would be sent to ' + to);
